@@ -14,7 +14,7 @@
   .header h1 { color: #f59e0b; font-size: 1.25rem; }
   .header small { color: #94a3b8; font-size: 0.75rem; display: block; }
   .btn {
-    display: inline-block; padding: 8px 16px; border-radius: 6px; border: none;
+    display: inline-block; padding: 10px 18px; border-radius: 6px; border: none;
     font-size: 0.875rem; font-weight: 600; cursor: pointer;
   }
   .btn-primary { background: #f59e0b; color: #0f172a; }
@@ -49,19 +49,19 @@
   .tabs { display: flex; gap: 4px; border-bottom: 1px solid #334155; margin-bottom: 16px; overflow-x: auto; }
   .tab { padding: 10px 16px; font-size: 0.875rem; color: #94a3b8; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
   .tab.active { color: #f59e0b; border-bottom-color: #f59e0b; }
-  .form-group { margin-bottom: 12px; }
-  label { display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; }
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; }
   input, textarea, select {
-    width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155;
-    border-radius: 6px; color: #f8fafc; font-size: 0.875rem;
+    width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid #334155;
+    border-radius: 6px; color: #f8fafc; font-size: 0.875rem; font-family: inherit;
   }
-  textarea { min-height: 60px; resize: vertical; }
+  textarea { min-height: 80px; resize: vertical; }
   .claim-card { border-left: 3px solid #334155; padding-left: 12px; margin-bottom: 16px; }
   .claim-card.pass { border-left-color: #22c55e; }
   .claim-card.fail { border-left-color: #ef4444; }
   .claim-card.pending { border-left-color: #f59e0b; }
   .claim-text { font-size: 0.95rem; margin-bottom: 4px; }
-  .claim-meta { font-size: 0.75rem; color: #94a3b8; }
+  .claim-meta { font-size: 0.75rem; color: #94a3b8; margin-top: 4px; }
   .scripture-box { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px; margin: 6px 0; font-style: italic; }
   .scripture-ref { font-weight: 700; color: #f59e0b; font-size: 0.75rem; margin-bottom: 4px; font-style: normal; }
   .violation-box { background: #450a0a; border: 1px solid #7f1d1d; border-radius: 6px; padding: 10px; margin: 6px 0; font-size: 0.75rem; }
@@ -72,6 +72,8 @@
   .loading { text-align: center; padding: 40px; color: #94a3b8; }
   .error { color: #ef4444; padding: 20px; text-align: center; }
   .empty { text-align: center; padding: 40px; color: #94a3b8; }
+  .success { color: #22c55e; padding: 12px; background: #064e3b; border-radius: 6px; margin-bottom: 12px; font-size: 0.875rem; }
+  .hint { font-size: 0.75rem; color: #94a3b8; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -127,7 +129,7 @@ async function loadList() {
 function renderList(prods) {
   const app = document.getElementById('app');
   if (!prods.length) {
-    app.innerHTML = '<div class="empty">No productions yet.</div>';
+    app.innerHTML = '<div class="empty">No productions yet. Tap "+ New Production" to start.</div>';
     return;
   }
   let html = '<div class="card"><table><thead><tr><th>Topic</th><th>Category</th><th>Scripture</th><th>Stage</th></tr></thead><tbody>';
@@ -198,11 +200,11 @@ function renderDetail() {
   if (currentTab === 'overview') {
     html += `<div class="card">
       <div class="card-title">Overview</div>
-      ${p.hook ? `<p><strong>Hook:</strong> ${escapeHtml(p.hook)}</p>` : ''}
-      ${p.problem ? `<p><strong>Problem:</strong> ${escapeHtml(p.problem)}</p>` : ''}
-      ${p.explanation ? `<p><strong>Explanation:</strong> ${escapeHtml(p.explanation)}</p>` : ''}
-      ${p.story ? `<p><strong>Story:</strong> ${escapeHtml(p.story)}</p>` : ''}
-      ${p.application ? `<p><strong>Application:</strong> ${escapeHtml(p.application)}</p>` : ''}
+      ${p.hook ? `<p style="margin-bottom:10px"><strong>Hook:</strong> ${escapeHtml(p.hook)}</p>` : ''}
+      ${p.problem ? `<p style="margin-bottom:10px"><strong>Problem:</strong> ${escapeHtml(p.problem)}</p>` : ''}
+      ${p.explanation ? `<p style="margin-bottom:10px"><strong>Explanation:</strong> ${escapeHtml(p.explanation)}</p>` : ''}
+      ${p.story ? `<p style="margin-bottom:10px"><strong>Story:</strong> ${escapeHtml(p.story)}</p>` : ''}
+      ${p.application ? `<p style="margin-bottom:10px"><strong>Application:</strong> ${escapeHtml(p.application)}</p>` : ''}
       ${p.cta ? `<p><strong>CTA:</strong> ${escapeHtml(p.cta)}</p>` : ''}
       ${!p.hook ? '<div class="empty">No research submitted yet.</div>' : ''}
     </div>`;
@@ -210,6 +212,7 @@ function renderDetail() {
 
   if (currentTab === 'claims') {
     html += '<div class="card"><div class="card-title">Claims</div>';
+    if (!p.claims.length) html += '<div class="empty">No claims submitted yet.</div>';
     for (const c of p.claims) {
       const statusClass = c.status === 'pass' ? 'pass' : c.status === 'fail' ? 'fail' : 'pending';
       html += `<div class="claim-card ${statusClass}">
@@ -222,6 +225,18 @@ function renderDetail() {
       if (c.source_reference) {
         html += `<div class="scripture-box"><div class="scripture-ref">${escapeHtml(c.source_reference)}</div>${escapeHtml(c.source_text || '')}</div>`;
       }
+      if (c.context) {
+        html += `<div style="margin:6px 0;font-size:0.8125rem;color:#94a3b8"><strong style="color:#f8fafc">Context:</strong> ${escapeHtml(c.context)}</div>`;
+      }
+      if (c.interpretation) {
+        html += `<div style="margin:6px 0;font-size:0.8125rem;color:#94a3b8"><strong style="color:#f8fafc">Interpretation:</strong> ${escapeHtml(c.interpretation)}</div>`;
+      }
+      if (c.cross_references?.length) {
+        html += `<div style="margin:6px 0;font-size:0.8125rem"><strong style="color:#f8fafc">Cross-refs:</strong> ${c.cross_references.join(', ')}</div>`;
+      }
+      if (c.alternative_interpretations) {
+        html += `<div style="margin:6px 0;font-size:0.8125rem;color:#94a3b8"><strong style="color:#f8fafc">Alternative Views:</strong> ${escapeHtml(c.alternative_interpretations)}</div>`;
+      }
       if (c.evidence_notes && c.status === 'fail') {
         html += `<div class="violation-box"><strong>Violation:</strong> ${escapeHtml(c.evidence_notes)}</div>`;
       }
@@ -232,6 +247,7 @@ function renderDetail() {
 
   if (currentTab === 'scenes') {
     html += '<div class="card"><div class="card-title">Scenes</div>';
+    if (!p.scenes.length) html += '<div class="empty">No scenes submitted yet.</div>';
     for (const s of p.scenes) {
       html += `<div class="claim-card" style="border-left-color:#334155">
         <div style="font-weight:700;margin-bottom:4px">Scene ${s.order + 1}</div>
@@ -245,13 +261,70 @@ function renderDetail() {
 
   if (currentTab === 'actions') {
     html += '<div id="actions-panel">';
-    if (p.stage === 'script') {
+    
+    // STAGE: DISCOVERY → Submit Research
+    if (p.stage === 'discovery') {
+      html += `<div class="card">
+        <div class="card-title">Submit Research</div>
+        <div class="form-group"><label>Hook</label><input id="rHook" placeholder="Grab attention in first 5 seconds"></div>
+        <div class="form-group"><label>Problem</label><input id="rProblem" placeholder="What pain point does this address?"></div>
+        <div class="form-group"><label>Explanation</label><textarea id="rExplanation" placeholder="Core theological explanation"></textarea></div>
+        <div class="form-group"><label>Story</label><textarea id="rStory" placeholder="Illustrative story or example"></textarea></div>
+        <div class="form-group"><label>Application</label><textarea id="rApplication" placeholder="How does this apply to the viewer?"></textarea></div>
+        <div class="form-group"><label>CTA</label><input id="rCta" placeholder="Subscribe, comment, etc."></div>
+        <button class="btn btn-primary" onclick="submitResearch('${p.id}')">Submit Research</button>
+      </div>`;
+    }
+    
+    // STAGE: RESEARCH → Submit Script + Claims
+    else if (p.stage === 'research') {
+      html += `<div class="card">
+        <div class="card-title">Submit Script & Claims</div>
+        
+        <div class="card-title" style="margin-top:16px;font-size:1rem">Claim 1</div>
+        <div class="form-group"><label>Claim Text *</label><input id="cText" placeholder="The theological claim you're making"></div>
+        <div class="form-group"><label>Source Reference *</label><input id="cSourceRef" placeholder="e.g., Genesis 6:2"></div>
+        <div class="form-group"><label>Source Text *</label><textarea id="cSourceText" placeholder="The actual biblical text"></textarea></div>
+        <div class="form-group"><label>Original Language</label><input id="cLang" placeholder="e.g., Hebrew: בְּנֵי הָאֱלֹהִים"></div>
+        <div class="form-group"><label>Context * <span style="color:#ef4444">(min 50 chars required)</span></label><textarea id="cContext" placeholder="Historical, literary, cultural context. MUST be 50+ characters or gate will block."></textarea><div class="hint" id="contextCount">0 characters</div></div>
+        <div class="form-group"><label>Interpretation *</label><textarea id="cInterp" placeholder="Your exegesis of this passage"></textarea></div>
+        <div class="form-group"><label>Confidence</label>
+          <select id="cConfidence">
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Claim Type</label>
+          <select id="cType">
+            <option value="scripture">Scripture (direct biblical statement)</option>
+            <option value="strong_inference">Strong Inference</option>
+            <option value="traditional">Traditional Interpretation</option>
+            <option value="scholarly" selected>Scholarly Opinion</option>
+            <option value="speculation">Speculation (cannot present as fact)</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Cross References (comma separated)</label><input id="cCross" placeholder="Job 1:6, Job 38:7, Psalm 82:6"></div>
+        <div class="form-group"><label>Alternative Interpretations</label><textarea id="cAlt" placeholder="Other views to acknowledge"></textarea></div>
+        
+        <div class="card-title" style="margin-top:20px;font-size:1rem">Scene 1</div>
+        <div class="form-group"><label>Narration Text *</label><textarea id="sNarration" placeholder="What the voiceover says"></textarea></div>
+        <div class="form-group"><label>Visual Prompt *</label><input id="sVisual" placeholder="e.g., Ancient scroll unfurling, dark atmosphere"></div>
+        
+        <button class="btn btn-primary" onclick="submitScript('${p.id}')">Submit Script & Claims</button>
+      </div>`;
+    }
+    
+    // STAGE: SCRIPT → Run Evidence Gate
+    else if (p.stage === 'script') {
       html += `<div class="card"><div class="card-title">Run Evidence Gate</div>
         <p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Run the 12 theological blockers against all claims.</p>
         <button class="btn btn-primary" onclick="runGate('${p.id}')">Run Evidence Gate</button>
       </div>`;
     }
-    if (p.stage === 'evidence_gate') {
+    
+    // STAGE: EVIDENCE_GATE → Human Review
+    else if (p.stage === 'evidence_gate') {
       html += `<div class="card" style="border-left:3px solid #f59e0b">
         <div class="card-title">🛡️ Human Review Required</div>
         <p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">This production requires your explicit approval.</p>
@@ -263,13 +336,17 @@ function renderDetail() {
         </div>
       </div>`;
     }
-    if (p.stage === 'human_review') {
+    
+    // STAGE: HUMAN_REVIEW → Start Production
+    else if (p.stage === 'human_review') {
       html += `<div class="card"><div class="card-title">Start Production</div>
         <p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Generate TTS, visuals, and assemble video.</p>
         <button class="btn btn-primary" onclick="doProduce('${p.id}')">Start Production</button>
       </div>`;
     }
-    if (p.stage === 'quality_gate') {
+    
+    // STAGE: QUALITY_GATE
+    else if (p.stage === 'quality_gate') {
       html += `<div class="card" style="border-left:3px solid #3b82f6">
         <div class="card-title">Quality Gate</div>
         <div class="form-group"><label>Reviewer</label><input id="qReviewer" value="david"></div>
@@ -280,17 +357,21 @@ function renderDetail() {
         </div>
       </div>`;
     }
-    if (p.stage === 'packaging') {
+    
+    // STAGE: PACKAGING
+    else if (p.stage === 'packaging') {
       html += `<div class="card" style="border-left:3px solid #f59e0b">
         <div class="card-title">Packaging</div>
         <div class="form-group"><label>Title</label><input id="pTitle" value="${escapeHtml(p.title || '')}"></div>
         <div class="form-group"><label>Description</label><textarea id="pDesc">${escapeHtml(p.description || '')}</textarea></div>
-        <div class="form-group"><label>Keywords</label><input id="pKeywords" value="${escapeHtml(p.keywords || '')}"></div>
+        <div class="form-group"><label>Keywords (comma separated)</label><input id="pKeywords" value="${escapeHtml(p.keywords || '')}"></div>
         <div class="form-group"><label>Thumbnail Prompt</label><input id="pThumb" value="${escapeHtml(p.thumbnail_prompt || '')}"></div>
         <button class="btn btn-primary" onclick="doPackaging('${p.id}')">Save Packaging</button>
       </div>`;
     }
-    if (p.stage === 'approval') {
+    
+    // STAGE: APPROVAL
+    else if (p.stage === 'approval') {
       html += `<div class="card" style="border-left:3px solid #22c55e">
         <div class="card-title">Final Approval</div>
         <div class="form-group"><label>Reviewer</label><input id="aReviewer" value="david"></div>
@@ -298,20 +379,93 @@ function renderDetail() {
         <button class="btn btn-success" onclick="doApprove('${p.id}')">🚀 Final Approve</button>
       </div>`;
     }
-    if (!['script','evidence_gate','human_review','quality_gate','packaging','approval'].includes(p.stage)) {
-      html += `<div class="card empty">No actions available at stage <strong>${STAGE_LABELS[p.stage]}</strong>.</div>`;
+    
+    else {
+      html += `<div class="card empty">No actions available at stage <strong>${STAGE_LABELS[p.stage]}</strong>. ${p.stage==='production'?'Production running in background...':''} ${p.stage==='assembly'?'Video assembling...':''} ${p.stage==='published'?'This production has been published.':''}</div>`;
     }
+    
     html += '</div>';
   }
 
   app.innerHTML = html;
+  
+  // Add context counter listener
+  const ctx = document.getElementById('cContext');
+  if (ctx) {
+    ctx.addEventListener('input', function() {
+      document.getElementById('contextCount').textContent = this.value.length + ' characters' + (this.value.length < 50 ? ' (need 50+)' : ' ✓');
+      document.getElementById('contextCount').style.color = this.value.length < 50 ? '#ef4444' : '#22c55e';
+    });
+  }
 }
 
 function setTab(tab) { currentTab = tab; renderDetail(); }
 
+async function submitResearch(id) {
+  const data = {
+    hook: document.getElementById('rHook').value,
+    problem: document.getElementById('rProblem').value,
+    explanation: document.getElementById('rExplanation').value,
+    story: document.getElementById('rStory').value,
+    application: document.getElementById('rApplication').value,
+    cta: document.getElementById('rCta').value,
+  };
+  try {
+    await api('/productions/' + id + '/research', { method: 'POST', body: JSON.stringify(data) });
+    loadDetail(id);
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function submitScript(id) {
+  const context = document.getElementById('cContext').value;
+  if (context.length < 50) {
+    alert('Context must be at least 50 characters. Currently: ' + context.length);
+    return;
+  }
+  
+  const data = {
+    claims: [{
+      claim_text: document.getElementById('cText').value,
+      source_reference: document.getElementById('cSourceRef').value,
+      source_text: document.getElementById('cSourceText').value,
+      original_language: document.getElementById('cLang').value || 'Hebrew',
+      context: context,
+      interpretation: document.getElementById('cInterp').value,
+      confidence: document.getElementById('cConfidence').value,
+      claim_type: document.getElementById('cType').value,
+      cross_references: document.getElementById('cCross').value.split(',').map(s => s.trim()).filter(Boolean),
+      alternative_interpretations: document.getElementById('cAlt').value,
+    }],
+    scenes: [{
+      order_index: 0,
+      narration_text: document.getElementById('sNarration').value,
+      visual_prompt: document.getElementById('sVisual').value,
+      claim_ids: [0]
+    }]
+  };
+  
+  // Validate required fields
+  if (!data.claims[0].claim_text || !data.claims[0].source_reference || !data.claims[0].source_text || !data.claims[0].interpretation) {
+    alert('Please fill in all required claim fields (marked with *)');
+    return;
+  }
+  if (!data.scenes[0].narration_text || !data.scenes[0].visual_prompt) {
+    alert('Please fill in all required scene fields');
+    return;
+  }
+  
+  try {
+    await api('/productions/' + id + '/script', { method: 'POST', body: JSON.stringify(data) });
+    loadDetail(id);
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
 async function runGate(id) {
   try {
-    await api('/productions/' + id + '/evidence', { method: 'POST' });
+    const res = await api('/productions/' + id + '/evidence', { method: 'POST' });
+    if (res.decision === 'FAIL') {
+      alert('Evidence Gate FAILED:\n\n' + res.violations.map(v => '• ' + v.detail).join('\n') + '\n\nFix the issues and resubmit script.');
+    }
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
@@ -331,7 +485,7 @@ async function doReview(id, decision) {
 async function doProduce(id) {
   try {
     await api('/productions/' + id + '/produce', { method: 'POST' });
-    alert('Production started in background.');
+    alert('Production started in background. Check back in 30 seconds.');
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
@@ -401,7 +555,7 @@ function showNew() {
       <div class="form-group" style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" id="nGospel"> <label for="nGospel" style="margin:0">Gospel video (extra scrutiny)</label>
       </div>
-      <button class="btn btn-primary" onclick="doCreate()">Create</button>
+      <button class="btn btn-primary" onclick="doCreate()">Create Production</button>
     </div>
   `;
 }
@@ -414,6 +568,7 @@ async function doCreate() {
     primary_scripture: document.getElementById('nScripture').value,
     gospel_video: document.getElementById('nGospel').checked,
   };
+  if (!data.topic) { alert('Topic is required'); return; }
   try {
     const res = await api('/productions', { method: 'POST', body: JSON.stringify(data) });
     loadDetail(res.id);
