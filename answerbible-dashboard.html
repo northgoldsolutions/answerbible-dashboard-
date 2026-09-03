@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Answers in Faith — Review Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.5; padding: 16px;
+  }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 8px; }
+  .header h1 { color: #f59e0b; font-size: 1.25rem; }
+  .header small { color: #94a3b8; font-size: 0.75rem; display: block; }
+  .btn {
+    display: inline-block; padding: 8px 16px; border-radius: 6px; border: none;
+    font-size: 0.875rem; font-weight: 600; cursor: pointer;
+  }
+  .btn-primary { background: #f59e0b; color: #0f172a; }
+  .btn-success { background: #22c55e; color: white; }
+  .btn-danger { background: #ef4444; color: white; }
+  .btn-outline { background: transparent; border: 1px solid #334155; color: #f8fafc; }
+  .card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 12px;
+  }
+  .card-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; }
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.7rem;
+    font-weight: 600; text-transform: uppercase; margin-right: 4px;
+  }
+  .badge-discovery { background: #1e3a5f; color: #60a5fa; }
+  .badge-research { background: #1e3a5f; color: #60a5fa; }
+  .badge-script { background: #3f3f00; color: #facc15; }
+  .badge-evidence { background: #7c2d12; color: #fb923c; }
+  .badge-human { background: #7c2d12; color: #fb923c; }
+  .badge-production { background: #581c87; color: #c084fc; }
+  .badge-assembly { background: #581c87; color: #c084fc; }
+  .badge-quality { background: #7c2d12; color: #fb923c; }
+  .badge-packaging { background: #3f3f00; color: #facc15; }
+  .badge-approval { background: #7c2d12; color: #fb923c; }
+  .badge-published { background: #064e3b; color: #34d399; }
+  .badge-pass { background: #064e3b; color: #34d399; }
+  .badge-fail { background: #450a0a; color: #f87171; }
+  .badge-pending { background: #3f3f00; color: #facc15; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #334155; }
+  th { color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid #334155; margin-bottom: 16px; overflow-x: auto; }
+  .tab { padding: 10px 16px; font-size: 0.875rem; color: #94a3b8; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+  .tab.active { color: #f59e0b; border-bottom-color: #f59e0b; }
+  .form-group { margin-bottom: 12px; }
+  label { display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; }
+  input, textarea, select {
+    width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155;
+    border-radius: 6px; color: #f8fafc; font-size: 0.875rem;
+  }
+  textarea { min-height: 60px; resize: vertical; }
+  .claim-card { border-left: 3px solid #334155; padding-left: 12px; margin-bottom: 16px; }
+  .claim-card.pass { border-left-color: #22c55e; }
+  .claim-card.fail { border-left-color: #ef4444; }
+  .claim-card.pending { border-left-color: #f59e0b; }
+  .claim-text { font-size: 0.95rem; margin-bottom: 4px; }
+  .claim-meta { font-size: 0.75rem; color: #94a3b8; }
+  .scripture-box { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px; margin: 6px 0; font-style: italic; }
+  .scripture-ref { font-weight: 700; color: #f59e0b; font-size: 0.75rem; margin-bottom: 4px; font-style: normal; }
+  .violation-box { background: #450a0a; border: 1px solid #7f1d1d; border-radius: 6px; padding: 10px; margin: 6px 0; font-size: 0.75rem; }
+  .pipeline { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 12px 0; }
+  .pipeline-step { padding: 5px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; background: #334155; color: #94a3b8; }
+  .pipeline-step.done { background: #064e3b; color: #34d399; }
+  .pipeline-step.current { background: #f59e0b; color: #0f172a; }
+  .loading { text-align: center; padding: 40px; color: #94a3b8; }
+  .error { color: #ef4444; padding: 20px; text-align: center; }
+  .empty { text-align: center; padding: 40px; color: #94a3b8; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Answers in Faith</h1>
+    <small>Theological Review Dashboard</small>
+  </div>
+  <button class="btn btn-primary" onclick="showNew()">+ New Production</button>
+</div>
+
+<div id="app">
+  <div class="loading">Loading productions...</div>
+</div>
+
+<script>
+const API_URL = 'https://answerbible-production.up.railway.app/api';
+
+async function api(path, opts = {}) {
+  const res = await fetch(API_URL + path, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+const STAGES = ['discovery','research','script','evidence_gate','human_review','production','assembly','quality_gate','packaging','approval','published'];
+const STAGE_LABELS = {
+  discovery:'Discovery', research:'Research', script:'Script', evidence_gate:'Evidence Gate',
+  human_review:'Human Review', production:'Production', assembly:'Assembly',
+  quality_gate:'Quality Gate', packaging:'Packaging', approval:'Approval', published:'Published'
+};
+
+let currentProd = null;
+let currentTab = 'overview';
+
+async function loadList() {
+  const app = document.getElementById('app');
+  app.innerHTML = '<div class="loading">Loading productions...</div>';
+  try {
+    const prods = await api('/productions');
+    renderList(prods);
+  } catch (e) {
+    app.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+  }
+}
+
+function renderList(prods) {
+  const app = document.getElementById('app');
+  if (!prods.length) {
+    app.innerHTML = '<div class="empty">No productions yet.</div>';
+    return;
+  }
+  let html = '<div class="card"><table><thead><tr><th>Topic</th><th>Category</th><th>Scripture</th><th>Stage</th></tr></thead><tbody>';
+  for (const p of prods) {
+    html += `<tr style="cursor:pointer" onclick="loadDetail('${p.id}')">
+      <td><strong>${escapeHtml(p.topic)}</strong></td>
+      <td style="text-transform:capitalize">${p.doctrinal_category?.replace(/_/g,' ')}</td>
+      <td>${p.primary_scripture || '—'}</td>
+      <td>${stageBadge(p.stage)}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+  app.innerHTML = html;
+}
+
+async function loadDetail(id) {
+  const app = document.getElementById('app');
+  app.innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    currentProd = await api('/productions/' + id);
+    currentTab = 'overview';
+    renderDetail();
+  } catch (e) {
+    app.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+  }
+}
+
+function renderDetail() {
+  const p = currentProd;
+  const app = document.getElementById('app');
+  const idx = STAGES.indexOf(p.stage);
+
+  let pipeline = '<div class="pipeline">';
+  for (let i = 0; i < STAGES.length; i++) {
+    const cls = i < idx ? 'done' : i === idx ? 'current' : '';
+    pipeline += `<div class="pipeline-step ${cls}">${STAGE_LABELS[STAGES[i]]}</div>`;
+    if (i < STAGES.length - 1) pipeline += '<span style="color:#334155">→</span>';
+  }
+  pipeline += '</div>';
+
+  let html = `
+    <button class="btn btn-outline" onclick="loadList()" style="margin-bottom:12px">← Back</button>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <div>
+          <div class="card-title">${escapeHtml(p.topic)}</div>
+          <div style="font-size:0.75rem;color:#94a3b8">
+            ${p.primary_scripture ? '📖 ' + p.primary_scripture + ' | ' : ''}
+            ${p.doctrinal_category?.replace(/_/g,' ')} | 
+            ${p.gospel_video ? '⛪ Gospel | ' : ''}
+            Approved: ${p.approved_by || '—'}
+          </div>
+        </div>
+        ${stageBadge(p.stage)}
+      </div>
+      ${pipeline}
+    </div>
+    <div class="tabs">
+      <button class="tab ${currentTab==='overview'?'active':''}" onclick="setTab('overview')">Overview</button>
+      <button class="tab ${currentTab==='claims'?'active':''}" onclick="setTab('claims')">Claims</button>
+      <button class="tab ${currentTab==='scenes'?'active':''}" onclick="setTab('scenes')">Scenes</button>
+      <button class="tab ${currentTab==='actions'?'active':''}" onclick="setTab('actions')">
+        ${p.requires_manual_review && p.stage==='evidence_gate' ? '<span style="color:#ef4444">●</span> ' : ''}Actions
+      </button>
+    </div>
+  `;
+
+  if (currentTab === 'overview') {
+    html += `<div class="card">
+      <div class="card-title">Overview</div>
+      ${p.hook ? `<p><strong>Hook:</strong> ${escapeHtml(p.hook)}</p>` : ''}
+      ${p.problem ? `<p><strong>Problem:</strong> ${escapeHtml(p.problem)}</p>` : ''}
+      ${p.explanation ? `<p><strong>Explanation:</strong> ${escapeHtml(p.explanation)}</p>` : ''}
+      ${p.story ? `<p><strong>Story:</strong> ${escapeHtml(p.story)}</p>` : ''}
+      ${p.application ? `<p><strong>Application:</strong> ${escapeHtml(p.application)}</p>` : ''}
+      ${p.cta ? `<p><strong>CTA:</strong> ${escapeHtml(p.cta)}</p>` : ''}
+      ${!p.hook ? '<div class="empty">No research submitted yet.</div>' : ''}
+    </div>`;
+  }
+
+  if (currentTab === 'claims') {
+    html += '<div class="card"><div class="card-title">Claims</div>';
+    for (const c of p.claims) {
+      const statusClass = c.status === 'pass' ? 'pass' : c.status === 'fail' ? 'fail' : 'pending';
+      html += `<div class="claim-card ${statusClass}">
+        <div class="claim-text">${escapeHtml(c.text)}</div>
+        <div class="claim-meta">
+          <span class="badge badge-${c.confidence}">${c.confidence}</span>
+          <span class="badge badge-${c.type}">${c.type.replace(/_/g,' ')}</span>
+          <span class="badge badge-${c.status}">${c.status}</span>
+        </div>`;
+      if (c.source_reference) {
+        html += `<div class="scripture-box"><div class="scripture-ref">${escapeHtml(c.source_reference)}</div>${escapeHtml(c.source_text || '')}</div>`;
+      }
+      if (c.evidence_notes && c.status === 'fail') {
+        html += `<div class="violation-box"><strong>Violation:</strong> ${escapeHtml(c.evidence_notes)}</div>`;
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  if (currentTab === 'scenes') {
+    html += '<div class="card"><div class="card-title">Scenes</div>';
+    for (const s of p.scenes) {
+      html += `<div class="claim-card" style="border-left-color:#334155">
+        <div style="font-weight:700;margin-bottom:4px">Scene ${s.order + 1}</div>
+        <div style="font-size:0.875rem;margin-bottom:4px">${escapeHtml(s.narration_text || '(no narration)')}</div>
+        <div style="font-size:0.75rem;color:#94a3b8;font-style:italic">${escapeHtml(s.visual_prompt || '')}</div>
+        <div style="margin-top:6px"><span class="badge badge-${s.status}">${s.status}</span>${s.locked ? ' <span class="badge" style="background:#334155">Locked</span>' : ''}</div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  if (currentTab === 'actions') {
+    html += '<div id="actions-panel">';
+    if (p.stage === 'script') {
+      html += `<div class="card"><div class="card-title">Run Evidence Gate</div>
+        <p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Run the 12 theological blockers against all claims.</p>
+        <button class="btn btn-primary" onclick="runGate('${p.id}')">Run Evidence Gate</button>
+      </div>`;
+    }
+    if (p.stage === 'evidence_gate') {
+      html += `<div class="card" style="border-left:3px solid #f59e0b">
+        <div class="card-title">🛡️ Human Review Required</div>
+        <p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">This production requires your explicit approval.</p>
+        <div class="form-group"><label>Reviewer</label><input id="reviewer" value="david"></div>
+        <div class="form-group"><label>Notes</label><textarea id="reviewNotes" placeholder="Approval notes..."></textarea></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-success" onclick="doReview('${p.id}','pass')">✓ Approve</button>
+          <button class="btn btn-danger" onclick="doReview('${p.id}','repair')">Send Back</button>
+        </div>
+      </div>`;
+    }
+    if (p.stage === 'human_review') {
+      html += `<div class="card"><div class="card-title">Start Production</div>
+        <p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Generate TTS, visuals, and assemble video.</p>
+        <button class="btn btn-primary" onclick="doProduce('${p.id}')">Start Production</button>
+      </div>`;
+    }
+    if (p.stage === 'quality_gate') {
+      html += `<div class="card" style="border-left:3px solid #3b82f6">
+        <div class="card-title">Quality Gate</div>
+        <div class="form-group"><label>Reviewer</label><input id="qReviewer" value="david"></div>
+        <div class="form-group"><label>Notes</label><textarea id="qNotes"></textarea></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-success" onclick="doQuality('${p.id}','pass')">Pass</button>
+          <button class="btn btn-danger" onclick="doQuality('${p.id}','repair')">Needs Repair</button>
+        </div>
+      </div>`;
+    }
+    if (p.stage === 'packaging') {
+      html += `<div class="card" style="border-left:3px solid #f59e0b">
+        <div class="card-title">Packaging</div>
+        <div class="form-group"><label>Title</label><input id="pTitle" value="${escapeHtml(p.title || '')}"></div>
+        <div class="form-group"><label>Description</label><textarea id="pDesc">${escapeHtml(p.description || '')}</textarea></div>
+        <div class="form-group"><label>Keywords</label><input id="pKeywords" value="${escapeHtml(p.keywords || '')}"></div>
+        <div class="form-group"><label>Thumbnail Prompt</label><input id="pThumb" value="${escapeHtml(p.thumbnail_prompt || '')}"></div>
+        <button class="btn btn-primary" onclick="doPackaging('${p.id}')">Save Packaging</button>
+      </div>`;
+    }
+    if (p.stage === 'approval') {
+      html += `<div class="card" style="border-left:3px solid #22c55e">
+        <div class="card-title">Final Approval</div>
+        <div class="form-group"><label>Reviewer</label><input id="aReviewer" value="david"></div>
+        <div class="form-group"><label>Notes</label><textarea id="aNotes"></textarea></div>
+        <button class="btn btn-success" onclick="doApprove('${p.id}')">🚀 Final Approve</button>
+      </div>`;
+    }
+    if (!['script','evidence_gate','human_review','quality_gate','packaging','approval'].includes(p.stage)) {
+      html += `<div class="card empty">No actions available at stage <strong>${STAGE_LABELS[p.stage]}</strong>.</div>`;
+    }
+    html += '</div>';
+  }
+
+  app.innerHTML = html;
+}
+
+function setTab(tab) { currentTab = tab; renderDetail(); }
+
+async function runGate(id) {
+  try {
+    await api('/productions/' + id + '/evidence', { method: 'POST' });
+    loadDetail(id);
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function doReview(id, decision) {
+  const reviewer = document.getElementById('reviewer').value;
+  const notes = document.getElementById('reviewNotes').value;
+  try {
+    await api('/productions/' + id + '/review', {
+      method: 'POST',
+      body: JSON.stringify({ decision, reviewer, notes })
+    });
+    loadDetail(id);
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function doProduce(id) {
+  try {
+    await api('/productions/' + id + '/produce', { method: 'POST' });
+    alert('Production started in background.');
+    loadDetail(id);
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function doQuality(id, decision) {
+  const reviewer = document.getElementById('qReviewer').value;
+  const notes = document.getElementById('qNotes').value;
+  try {
+    await api('/productions/' + id + '/quality', {
+      method: 'POST',
+      body: JSON.stringify({ decision, reviewer, notes })
+    });
+    loadDetail(id);
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function doPackaging(id) {
+  const data = {
+    title: document.getElementById('pTitle').value,
+    description: document.getElementById('pDesc').value,
+    keywords: document.getElementById('pKeywords').value,
+    thumbnail_prompt: document.getElementById('pThumb').value,
+  };
+  try {
+    await api('/productions/' + id + '/packaging', { method: 'POST', body: JSON.stringify(data) });
+    loadDetail(id);
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function doApprove(id) {
+  const reviewer = document.getElementById('aReviewer').value;
+  const notes = document.getElementById('aNotes').value;
+  try {
+    await api('/productions/' + id + '/approve', {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'pass', reviewer, notes })
+    });
+    loadDetail(id);
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+function showNew() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <button class="btn btn-outline" onclick="loadList()" style="margin-bottom:12px">← Back</button>
+    <div class="card" style="max-width:600px">
+      <div class="card-title">New Production</div>
+      <div class="form-group"><label>Topic *</label><input id="nTopic" placeholder="e.g., Who were the Nephilim?"></div>
+      <div class="form-group"><label>Source Question</label><input id="nQuestion" placeholder="e.g., YouTube comment asking..."></div>
+      <div class="form-group"><label>Doctrinal Category</label>
+        <select id="nCat">
+          <option value="general">General</option>
+          <option value="genesis_6">Genesis 6 / Nephilim</option>
+          <option value="sheol">Sheol / Afterlife</option>
+          <option value="spiritual_warfare">Spiritual Warfare</option>
+          <option value="demons">Demons</option>
+          <option value="election">Election / Predestination</option>
+          <option value="end_times">End Times / Prophecy</option>
+          <option value="divorce">Divorce / Remarriage</option>
+          <option value="women_ministry">Women in Ministry</option>
+          <option value="salvation">Salvation / Gospel</option>
+          <option value="character_of_god">Character of God</option>
+          <option value="prophecy_dating">Prophecy Date-Setting</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Primary Scripture</label><input id="nScripture" placeholder="e.g., Genesis 6:1-4"></div>
+      <div class="form-group" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="nGospel"> <label for="nGospel" style="margin:0">Gospel video (extra scrutiny)</label>
+      </div>
+      <button class="btn btn-primary" onclick="doCreate()">Create</button>
+    </div>
+  `;
+}
+
+async function doCreate() {
+  const data = {
+    topic: document.getElementById('nTopic').value,
+    source_question: document.getElementById('nQuestion').value,
+    doctrinal_category: document.getElementById('nCat').value,
+    primary_scripture: document.getElementById('nScripture').value,
+    gospel_video: document.getElementById('nGospel').checked,
+  };
+  try {
+    const res = await api('/productions', { method: 'POST', body: JSON.stringify(data) });
+    loadDetail(res.id);
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+function stageBadge(stage) {
+  return `<span class="badge badge-${stage}">${STAGE_LABELS[stage] || stage}</span>`;
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Load on start
+loadList();
+</script>
+
+</body>
+</html>
