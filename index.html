@@ -92,6 +92,7 @@
 
 <script>
 const API_URL = 'https://answerbible-production.up.railway.app/api';
+const API_BASE = API_URL.replace(/\/api$/, '');
 
 async function api(path, opts = {}) {
   const res = await fetch(API_URL + path, {
@@ -122,7 +123,7 @@ async function loadList() {
     const prods = await api('/productions');
     renderList(prods);
   } catch (e) {
-    app.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+    app.innerHTML = '<div class="error">Error: ' + e.message + '</div>';
   }
 }
 
@@ -132,17 +133,26 @@ function renderList(prods) {
     app.innerHTML = '<div class="empty">No productions yet. Tap "+ New Production" to start.</div>';
     return;
   }
-  let html = '<div class="card"><table><thead><tr><th>Topic</th><th>Category</th><th>Scripture</th><th>Stage</th></tr></thead><tbody>';
+  let html = '<div class="card"><table><thead><tr><th>Topic</th><th>Category</th><th>Scripture</th><th>Stage</th><th style="width:50px"></th></tr></thead><tbody>';
   for (const p of prods) {
-    html += `<tr style="cursor:pointer" onclick="loadDetail('${p.id}')">
-      <td><strong>${escapeHtml(p.topic)}</strong></td>
-      <td style="text-transform:capitalize">${p.doctrinal_category?.replace(/_/g,' ')}</td>
-      <td>${p.primary_scripture || '—'}</td>
-      <td>${stageBadge(p.stage)}</td>
-    </tr>`;
+    html += '<tr style="cursor:pointer" onclick="loadDetail(\'' + p.id + '\')">'
+      + '<td><strong>' + escapeHtml(p.topic) + '</strong></td>'
+      + '<td style="text-transform:capitalize">' + (p.doctrinal_category ? p.doctrinal_category.replace(/_/g,' ') : '') + '</td>'
+      + '<td>' + (p.primary_scripture || '—') + '</td>'
+      + '<td>' + stageBadge(p.stage) + '</td>'
+      + '<td><button class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem" title="Delete production" onclick="event.stopPropagation();doDelete(\'' + p.id + '\')">🗑</button></td>'
+      + '</tr>';
   }
   html += '</tbody></table></div>';
   app.innerHTML = html;
+}
+
+async function doDelete(id) {
+  if (!confirm('Delete this production permanently? This cannot be undone.')) return;
+  try {
+    await api('/productions/' + id, { method: 'DELETE' });
+    loadList();
+  } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function loadDetail(id) {
@@ -153,8 +163,38 @@ async function loadDetail(id) {
     currentTab = 'overview';
     renderDetail();
   } catch (e) {
-    app.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+    app.innerHTML = '<div class="error">Error: ' + e.message + '</div>';
   }
+}
+
+function researchLinksHtml(p) {
+  const q = (p.primary_scripture || '').trim() || (p.topic || '').trim();
+  if (!q) return '';
+  const enc = encodeURIComponent(q);
+  return '<div style="margin:12px 0;padding:12px;background:#0f172a;border:1px solid #334155;border-radius:6px">'
+    + '<div style="font-weight:600;margin-bottom:4px">Research "' + escapeHtml(q) + '"</div>'
+    + '<div style="font-size:0.75rem;color:#94a3b8;margin-bottom:8px">Opens in a new tab</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    + '<a class="btn btn-outline" style="font-size:0.75rem;padding:6px 10px;text-decoration:none" target="_blank" rel="noopener noreferrer" href="https://www.biblegateway.com/passage/?search=' + enc + '&version=NIV">📖 BibleGateway</a>'
+    + '<a class="btn btn-outline" style="font-size:0.75rem;padding:6px 10px;text-decoration:none" target="_blank" rel="noopener noreferrer" href="https://biblehub.com/search?q=' + enc + '">🔤 BibleHub</a>'
+    + '<a class="btn btn-outline" style="font-size:0.75rem;padding:6px 10px;text-decoration:none" target="_blank" rel="noopener noreferrer" href="https://scholar.google.com/scholar?q=' + enc + '">🎓 Scholar</a>'
+    + '<a class="btn btn-outline" style="font-size:0.75rem;padding:6px 10px;text-decoration:none" target="_blank" rel="noopener noreferrer" href="https://www.google.com/search?q=' + enc + '">🌐 Google</a>'
+    + '</div></div>';
+}
+
+function videoHtml(p) {
+  let videoSrc = null, captionsSrc = null;
+  if (p.video_url) videoSrc = p.video_url.indexOf('http') === 0 ? p.video_url : API_BASE + p.video_url;
+  else if (p.has_video) videoSrc = API_BASE + '/api/download/' + p.id;
+  if (p.captions_url) captionsSrc = p.captions_url.indexOf('http') === 0 ? p.captions_url : API_BASE + p.captions_url;
+  else if (p.has_video) captionsSrc = API_BASE + '/api/download-captions/' + p.id;
+  if (!videoSrc) return '';
+  let h = '<video controls preload="metadata" src="' + videoSrc + '" style="width:100%;border-radius:6px;background:#000;margin-top:12px"></video>'
+    + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
+    + '<a class="btn btn-primary" style="text-decoration:none" href="' + videoSrc + '" download>⬇ Download Video</a>';
+  if (captionsSrc) h += '<a class="btn btn-outline" style="text-decoration:none" href="' + captionsSrc + '" download>⬇ Captions (.srt)</a>';
+  h += '</div>';
+  return h;
 }
 
 function renderDetail() {
@@ -165,49 +205,49 @@ function renderDetail() {
   let pipeline = '<div class="pipeline">';
   for (let i = 0; i < STAGES.length; i++) {
     const cls = i < idx ? 'done' : i === idx ? 'current' : '';
-    pipeline += `<div class="pipeline-step ${cls}">${STAGE_LABELS[STAGES[i]]}</div>`;
+    pipeline += '<div class="pipeline-step ' + cls + '">' + STAGE_LABELS[STAGES[i]] + '</div>';
     if (i < STAGES.length - 1) pipeline += '<span style="color:#334155">→</span>';
   }
   pipeline += '</div>';
 
-  let html = `
-    <button class="btn btn-outline" onclick="loadList()" style="margin-bottom:12px">← Back</button>
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-        <div>
-          <div class="card-title">${escapeHtml(p.topic)}</div>
-          <div style="font-size:0.75rem;color:#94a3b8">
-            ${p.primary_scripture ? '📖 ' + p.primary_scripture + ' | ' : ''}
-            ${p.doctrinal_category?.replace(/_/g,' ')} | 
-            ${p.gospel_video ? '⛪ Gospel | ' : ''}
-            Approved: ${p.approved_by || '—'}
-          </div>
-        </div>
-        ${stageBadge(p.stage)}
-      </div>
-      ${pipeline}
-    </div>
-    <div class="tabs">
-      <button class="tab ${currentTab==='overview'?'active':''}" onclick="setTab('overview')">Overview</button>
-      <button class="tab ${currentTab==='claims'?'active':''}" onclick="setTab('claims')">Claims</button>
-      <button class="tab ${currentTab==='scenes'?'active':''}" onclick="setTab('scenes')">Scenes</button>
-      <button class="tab ${currentTab==='actions'?'active':''}" onclick="setTab('actions')">
-        ${p.requires_manual_review && p.stage==='evidence_gate' ? '<span style="color:#ef4444">●</span> ' : ''}Actions
-      </button>
-    </div>
-  `;
+  let html = ''
+    + '<button class="btn btn-outline" onclick="loadList()" style="margin-bottom:12px">← Back</button>'
+    + '<div class="card">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">'
+    + '<div>'
+    + '<div class="card-title">' + escapeHtml(p.topic) + '</div>'
+    + '<div style="font-size:0.75rem;color:#94a3b8">'
+    + (p.primary_scripture ? '📖 ' + p.primary_scripture + ' | ' : '')
+    + (p.doctrinal_category ? p.doctrinal_category.replace(/_/g,' ') : '') + ' | '
+    + (p.gospel_video ? '⛪ Gospel | ' : '')
+    + 'Approved: ' + (p.approved_by || '—')
+    + '</div></div>'
+    + '<div style="display:flex;gap:6px;align-items:center">'
+    + stageBadge(p.stage)
+    + '<button class="btn btn-danger" onclick="doDelete(\'' + p.id + '\')">🗑 Delete</button>'
+    + '</div></div>'
+    + pipeline
+    + videoHtml(p)
+    + '</div>'
+    + '<div class="tabs">'
+    + '<button class="tab ' + (currentTab==='overview'?'active':'') + '" onclick="setTab(\'overview\')">Overview</button>'
+    + '<button class="tab ' + (currentTab==='claims'?'active':'') + '" onclick="setTab(\'claims\')">Claims</button>'
+    + '<button class="tab ' + (currentTab==='scenes'?'active':'') + '" onclick="setTab(\'scenes\')">Scenes</button>'
+    + '<button class="tab ' + (currentTab==='actions'?'active':'') + '" onclick="setTab(\'actions\')">'
+    + ((p.requires_manual_review && p.stage==='evidence_gate') ? '<span style="color:#ef4444">●</span> ' : '') + 'Actions'
+    + '</button></div>';
 
   if (currentTab === 'overview') {
-    html += `<div class="card">
-      <div class="card-title">Overview</div>
-      ${p.hook ? `<p style="margin-bottom:10px"><strong>Hook:</strong> ${escapeHtml(p.hook)}</p>` : ''}
-      ${p.problem ? `<p style="margin-bottom:10px"><strong>Problem:</strong> ${escapeHtml(p.problem)}</p>` : ''}
-      ${p.explanation ? `<p style="margin-bottom:10px"><strong>Explanation:</strong> ${escapeHtml(p.explanation)}</p>` : ''}
-      ${p.story ? `<p style="margin-bottom:10px"><strong>Story:</strong> ${escapeHtml(p.story)}</p>` : ''}
-      ${p.application ? `<p style="margin-bottom:10px"><strong>Application:</strong> ${escapeHtml(p.application)}</p>` : ''}
-      ${p.cta ? `<p><strong>CTA:</strong> ${escapeHtml(p.cta)}</p>` : ''}
-      ${!p.hook ? '<div class="empty">No research submitted yet.</div>' : ''}
-    </div>`;
+    html += '<div class="card"><div class="card-title">Overview</div>'
+      + researchLinksHtml(p)
+      + (p.hook ? '<p style="margin-bottom:10px"><strong>Hook:</strong> ' + escapeHtml(p.hook) + '</p>' : '')
+      + (p.problem ? '<p style="margin-bottom:10px"><strong>Problem:</strong> ' + escapeHtml(p.problem) + '</p>' : '')
+      + (p.explanation ? '<p style="margin-bottom:10px"><strong>Explanation:</strong> ' + escapeHtml(p.explanation) + '</p>' : '')
+      + (p.story ? '<p style="margin-bottom:10px"><strong>Story:</strong> ' + escapeHtml(p.story) + '</p>' : '')
+      + (p.application ? '<p style="margin-bottom:10px"><strong>Application:</strong> ' + escapeHtml(p.application) + '</p>' : '')
+      + (p.cta ? '<p><strong>CTA:</strong> ' + escapeHtml(p.cta) + '</p>' : '')
+      + (!p.hook ? '<div class="empty">No research submitted yet.</div>' : '')
+      + '</div>';
   }
 
   if (currentTab === 'claims') {
@@ -215,30 +255,30 @@ function renderDetail() {
     if (!p.claims.length) html += '<div class="empty">No claims submitted yet.</div>';
     for (const c of p.claims) {
       const statusClass = c.status === 'pass' ? 'pass' : c.status === 'fail' ? 'fail' : 'pending';
-      html += `<div class="claim-card ${statusClass}">
-        <div class="claim-text">${escapeHtml(c.text)}</div>
-        <div class="claim-meta">
-          <span class="badge badge-${c.confidence}">${c.confidence}</span>
-          <span class="badge badge-${c.type}">${c.type.replace(/_/g,' ')}</span>
-          <span class="badge badge-${c.status}">${c.status}</span>
-        </div>`;
+      html += '<div class="claim-card ' + statusClass + '">'
+        + '<div class="claim-text">' + escapeHtml(c.text) + '</div>'
+        + '<div class="claim-meta">'
+        + '<span class="badge badge-' + c.confidence + '">' + c.confidence + '</span> '
+        + '<span class="badge badge-' + c.type + '">' + c.type.replace(/_/g,' ') + '</span> '
+        + '<span class="badge badge-' + c.status + '">' + c.status + '</span>'
+        + '</div>';
       if (c.source_reference) {
-        html += `<div class="scripture-box"><div class="scripture-ref">${escapeHtml(c.source_reference)}</div>${escapeHtml(c.source_text || '')}</div>`;
+        html += '<div class="scripture-box"><div class="scripture-ref">' + escapeHtml(c.source_reference) + '</div>' + escapeHtml(c.source_text || '') + '</div>';
       }
       if (c.context) {
-        html += `<div style="margin:6px 0;font-size:0.8125rem;color:#94a3b8"><strong style="color:#f8fafc">Context:</strong> ${escapeHtml(c.context)}</div>`;
+        html += '<div style="margin:6px 0;font-size:0.8125rem;color:#94a3b8"><strong style="color:#f8fafc">Context:</strong> ' + escapeHtml(c.context) + '</div>';
       }
       if (c.interpretation) {
-        html += `<div style="margin:6px 0;font-size:0.8125rem;color:#94a3b8"><strong style="color:#f8fafc">Interpretation:</strong> ${escapeHtml(c.interpretation)}</div>`;
+        html += '<div style="margin:6px 0;font-size:0.8125rem;color:#94a3b8"><strong style="color:#f8fafc">Interpretation:</strong> ' + escapeHtml(c.interpretation) + '</div>';
       }
-      if (c.cross_references?.length) {
-        html += `<div style="margin:6px 0;font-size:0.8125rem"><strong style="color:#f8fafc">Cross-refs:</strong> ${c.cross_references.join(', ')}</div>`;
+      if (c.cross_references && c.cross_references.length) {
+        html += '<div style="margin:6px 0;font-size:0.8125rem"><strong style="color:#f8fafc">Cross-refs:</strong> ' + c.cross_references.join(', ') + '</div>';
       }
       if (c.alternative_interpretations) {
-        html += `<div style="margin:6px 0;font-size:0.8125rem;color:#94a3b8"><strong style="color:#f8fafc">Alternative Views:</strong> ${escapeHtml(c.alternative_interpretations)}</div>`;
+        html += '<div style="margin:6px 0;font-size:0.8125rem;color:#94a3b8"><strong style="color:#f8fafc">Alternative Views:</strong> ' + escapeHtml(c.alternative_interpretations) + '</div>';
       }
       if (c.evidence_notes && c.status === 'fail') {
-        html += `<div class="violation-box"><strong>Violation:</strong> ${escapeHtml(c.evidence_notes)}</div>`;
+        html += '<div class="violation-box"><strong>Violation:</strong> ' + escapeHtml(c.evidence_notes) + '</div>';
       }
       html += '</div>';
     }
@@ -249,12 +289,12 @@ function renderDetail() {
     html += '<div class="card"><div class="card-title">Scenes</div>';
     if (!p.scenes.length) html += '<div class="empty">No scenes submitted yet.</div>';
     for (const s of p.scenes) {
-      html += `<div class="claim-card" style="border-left-color:#334155">
-        <div style="font-weight:700;margin-bottom:4px">Scene ${s.order + 1}</div>
-        <div style="font-size:0.875rem;margin-bottom:4px">${escapeHtml(s.narration_text || '(no narration)')}</div>
-        <div style="font-size:0.75rem;color:#94a3b8;font-style:italic">${escapeHtml(s.visual_prompt || '')}</div>
-        <div style="margin-top:6px"><span class="badge badge-${s.status}">${s.status}</span>${s.locked ? ' <span class="badge" style="background:#334155">Locked</span>' : ''}</div>
-      </div>`;
+      html += '<div class="claim-card" style="border-left-color:#334155">'
+        + '<div style="font-weight:700;margin-bottom:4px">Scene ' + (s.order + 1) + '</div>'
+        + '<div style="font-size:0.875rem;margin-bottom:4px">' + escapeHtml(s.narration_text || '(no narration)') + '</div>'
+        + '<div style="font-size:0.75rem;color:#94a3b8;font-style:italic">' + escapeHtml(s.visual_prompt || '') + '</div>'
+        + '<div style="margin-top:6px"><span class="badge badge-' + s.status + '">' + s.status + '</span>' + (s.locked ? ' <span class="badge" style="background:#334155">Locked</span>' : '') + '</div>'
+        + '</div>';
     }
     html += '</div>';
   }
@@ -262,126 +302,104 @@ function renderDetail() {
   if (currentTab === 'actions') {
     html += '<div id="actions-panel">';
     
-    // STAGE: DISCOVERY → Submit Research
     if (p.stage === 'discovery') {
-      html += `<div class="card">
-        <div class="card-title">Submit Research</div>
-        <div class="form-group"><label>Hook</label><input id="rHook" placeholder="Grab attention in first 5 seconds"></div>
-        <div class="form-group"><label>Problem</label><input id="rProblem" placeholder="What pain point does this address?"></div>
-        <div class="form-group"><label>Explanation</label><textarea id="rExplanation" placeholder="Core theological explanation"></textarea></div>
-        <div class="form-group"><label>Story</label><textarea id="rStory" placeholder="Illustrative story or example"></textarea></div>
-        <div class="form-group"><label>Application</label><textarea id="rApplication" placeholder="How does this apply to the viewer?"></textarea></div>
-        <div class="form-group"><label>CTA</label><input id="rCta" placeholder="Subscribe, comment, etc."></div>
-        <button class="btn btn-primary" onclick="submitResearch('${p.id}')">Submit Research</button>
-      </div>`;
+      html += '<div class="card" style="border:1px dashed #f59e0b">'
+        + '<div class="card-title">⚡ Auto-Research</div>'
+        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Let AI draft the 6 research fields from your topic + scripture. You review the draft before anything advances.</p>'
+        + '<button class="btn btn-primary" onclick="doAutoResearch(\'' + p.id + '\')">⚡ Draft Research with AI</button>'
+        + '</div>';
+      html += '<div class="card">'
+        + '<div class="card-title">Submit Research</div>'
+        + '<div class="form-group"><label>Hook</label><input id="rHook" placeholder="Grab attention in first 5 seconds"></div>'
+        + '<div class="form-group"><label>Problem</label><input id="rProblem" placeholder="What pain point does this address?"></div>'
+        + '<div class="form-group"><label>Explanation</label><textarea id="rExplanation" placeholder="Core theological explanation"></textarea></div>'
+        + '<div class="form-group"><label>Story</label><textarea id="rStory" placeholder="Illustrative story or example"></textarea></div>'
+        + '<div class="form-group"><label>Application</label><textarea id="rApplication" placeholder="How does this apply to the viewer?"></textarea></div>'
+        + '<div class="form-group"><label>CTA</label><input id="rCta" placeholder="Subscribe, comment, etc."></div>'
+        + '<button class="btn btn-primary" onclick="submitResearch(\'' + p.id + '\')">Submit Research</button>'
+        + '</div>';
     }
     
-    // STAGE: RESEARCH → Submit Script + Claims
     else if (p.stage === 'research') {
-      html += `<div class="card">
-        <div class="card-title">Submit Script & Claims</div>
-        
-        <div class="card-title" style="margin-top:16px;font-size:1rem">Claim 1</div>
-        <div class="form-group"><label>Claim Text *</label><input id="cText" placeholder="The theological claim you're making"></div>
-        <div class="form-group"><label>Source Reference *</label><input id="cSourceRef" placeholder="e.g., Genesis 6:2"></div>
-        <div class="form-group"><label>Source Text *</label><textarea id="cSourceText" placeholder="The actual biblical text"></textarea></div>
-        <div class="form-group"><label>Original Language</label><input id="cLang" placeholder="e.g., Hebrew: בְּנֵי הָאֱלֹהִים"></div>
-        <div class="form-group"><label>Context * <span style="color:#ef4444">(min 50 chars required)</span></label><textarea id="cContext" placeholder="Historical, literary, cultural context. MUST be 50+ characters or gate will block."></textarea><div class="hint" id="contextCount">0 characters</div></div>
-        <div class="form-group"><label>Interpretation *</label><textarea id="cInterp" placeholder="Your exegesis of this passage"></textarea></div>
-        <div class="form-group"><label>Confidence</label>
-          <select id="cConfidence">
-            <option value="high">High</option>
-            <option value="medium" selected>Medium</option>
-            <option value="low">Low</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Claim Type</label>
-          <select id="cType">
-            <option value="scripture">Scripture (direct biblical statement)</option>
-            <option value="strong_inference">Strong Inference</option>
-            <option value="traditional">Traditional Interpretation</option>
-            <option value="scholarly" selected>Scholarly Opinion</option>
-            <option value="speculation">Speculation (cannot present as fact)</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Cross References (comma separated)</label><input id="cCross" placeholder="Job 1:6, Job 38:7, Psalm 82:6"></div>
-        <div class="form-group"><label>Alternative Interpretations</label><textarea id="cAlt" placeholder="Other views to acknowledge"></textarea></div>
-        
-        <div class="card-title" style="margin-top:20px;font-size:1rem">Scene 1</div>
-        <div class="form-group"><label>Narration Text *</label><textarea id="sNarration" placeholder="What the voiceover says"></textarea></div>
-        <div class="form-group"><label>Visual Prompt *</label><input id="sVisual" placeholder="e.g., Ancient scroll unfurling, dark atmosphere"></div>
-        
-        <button class="btn btn-primary" onclick="submitScript('${p.id}')">Submit Script & Claims</button>
-      </div>`;
+      html += '<div class="card">'
+        + '<div class="card-title">Submit Script & Claims</div>'
+        + '<div class="card-title" style="margin-top:16px;font-size:1rem">Claim 1</div>'
+        + '<div class="form-group"><label>Claim Text *</label><input id="cText" placeholder="The theological claim you are making"></div>'
+        + '<div class="form-group"><label>Source Reference *</label><input id="cSourceRef" placeholder="e.g., Genesis 6:2"></div>'
+        + '<div class="form-group"><label>Source Text *</label><textarea id="cSourceText" placeholder="The actual biblical text"></textarea></div>'
+        + '<div class="form-group"><label>Original Language</label><input id="cLang" placeholder="e.g., Hebrew"></div>'
+        + '<div class="form-group"><label>Context * (min 50 chars required)</label><textarea id="cContext" placeholder="Historical, literary, cultural context. MUST be 50+ characters or gate will block."></textarea><div class="hint" id="contextCount">0 characters</div></div>'
+        + '<div class="form-group"><label>Interpretation *</label><textarea id="cInterp" placeholder="Your exegesis of this passage"></textarea></div>'
+        + '<div class="form-group"><label>Confidence</label><select id="cConfidence"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></div>'
+        + '<div class="form-group"><label>Claim Type</label><select id="cType"><option value="scripture">Scripture (direct biblical statement)</option><option value="strong_inference">Strong Inference</option><option value="traditional">Traditional Interpretation</option><option value="scholarly" selected>Scholarly Opinion</option><option value="speculation">Speculation (cannot present as fact)</option></select></div>'
+        + '<div class="form-group"><label>Cross References (comma separated)</label><input id="cCross" placeholder="Job 1:6, Job 38:7, Psalm 82:6"></div>'
+        + '<div class="form-group"><label>Alternative Interpretations</label><textarea id="cAlt" placeholder="Other views to acknowledge"></textarea></div>'
+        + '<div class="card-title" style="margin-top:20px;font-size:1rem">Scene 1</div>'
+        + '<div class="form-group"><label>Narration Text *</label><textarea id="sNarration" placeholder="What the voiceover says"></textarea></div>'
+        + '<div class="form-group"><label>Visual Prompt *</label><input id="sVisual" placeholder="e.g., Ancient scroll unfurling, dark atmosphere"></div>'
+        + '<button class="btn btn-primary" onclick="submitScript(\'' + p.id + '\')">Submit Script & Claims</button>'
+        + '</div>';
     }
     
-    // STAGE: SCRIPT → Run Evidence Gate
     else if (p.stage === 'script') {
-      html += `<div class="card"><div class="card-title">Run Evidence Gate</div>
-        <p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Run the 12 theological blockers against all claims.</p>
-        <button class="btn btn-primary" onclick="runGate('${p.id}')">Run Evidence Gate</button>
-      </div>`;
+      html += '<div class="card"><div class="card-title">Run Evidence Gate</div>'
+        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Run the 12 theological blockers against all claims.</p>'
+        + '<button class="btn btn-primary" onclick="runGate(\'' + p.id + '\')">Run Evidence Gate</button></div>';
     }
     
-    // STAGE: EVIDENCE_GATE → Human Review
     else if (p.stage === 'evidence_gate') {
-      html += `<div class="card" style="border-left:3px solid #f59e0b">
-        <div class="card-title">🛡️ Human Review Required</div>
-        <p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">This production requires your explicit approval.</p>
-        <div class="form-group"><label>Reviewer</label><input id="reviewer" value="david"></div>
-        <div class="form-group"><label>Notes</label><textarea id="reviewNotes" placeholder="Approval notes..."></textarea></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-success" onclick="doReview('${p.id}','pass')">✓ Approve</button>
-          <button class="btn btn-danger" onclick="doReview('${p.id}','repair')">Send Back</button>
-        </div>
-      </div>`;
+      html += '<div class="card" style="border-left:3px solid #f59e0b">'
+        + '<div class="card-title">🛡️ Human Review Required</div>'
+        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">This production requires your explicit approval.</p>'
+        + '<div class="form-group"><label>Reviewer</label><input id="reviewer" value="david"></div>'
+        + '<div class="form-group"><label>Notes</label><textarea id="reviewNotes" placeholder="Approval notes..."></textarea></div>'
+        + '<div style="display:flex;gap:8px">'
+        + '<button class="btn btn-success" onclick="doReview(\'' + p.id + '\',\'pass\')">✓ Approve</button>'
+        + '<button class="btn btn-danger" onclick="doReview(\'' + p.id + '\',\'repair\')">Send Back</button>'
+        + '</div></div>';
     }
     
-    // STAGE: HUMAN_REVIEW → Start Production
     else if (p.stage === 'human_review') {
-      html += `<div class="card"><div class="card-title">Start Production</div>
-        <p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Generate TTS, visuals, and assemble video.</p>
-        <button class="btn btn-primary" onclick="doProduce('${p.id}')">Start Production</button>
-      </div>`;
+      html += '<div class="card"><div class="card-title">Start Production</div>'
+        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Generate TTS, visuals, and assemble video.</p>'
+        + '<button class="btn btn-primary" onclick="doProduce(\'' + p.id + '\')">Start Production</button></div>';
     }
     
-    // STAGE: QUALITY_GATE
     else if (p.stage === 'quality_gate') {
-      html += `<div class="card" style="border-left:3px solid #3b82f6">
-        <div class="card-title">Quality Gate</div>
-        <div class="form-group"><label>Reviewer</label><input id="qReviewer" value="david"></div>
-        <div class="form-group"><label>Notes</label><textarea id="qNotes"></textarea></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-success" onclick="doQuality('${p.id}','pass')">Pass</button>
-          <button class="btn btn-danger" onclick="doQuality('${p.id}','repair')">Needs Repair</button>
-        </div>
-      </div>`;
+      html += '<div class="card" style="border-left:3px solid #3b82f6">'
+        + '<div class="card-title">Quality Gate</div>'
+        + '<div class="form-group"><label>Reviewer</label><input id="qReviewer" value="david"></div>'
+        + '<div class="form-group"><label>Notes</label><textarea id="qNotes"></textarea></div>'
+        + '<div style="display:flex;gap:8px">'
+        + '<button class="btn btn-success" onclick="doQuality(\'' + p.id + '\',\'pass\')">Pass</button>'
+        + '<button class="btn btn-danger" onclick="doQuality(\'' + p.id + '\',\'repair\')">Needs Repair</button>'
+        + '</div></div>';
     }
     
-    // STAGE: PACKAGING
     else if (p.stage === 'packaging') {
-      html += `<div class="card" style="border-left:3px solid #f59e0b">
-        <div class="card-title">Packaging</div>
-        <div class="form-group"><label>Title</label><input id="pTitle" value="${escapeHtml(p.title || '')}"></div>
-        <div class="form-group"><label>Description</label><textarea id="pDesc">${escapeHtml(p.description || '')}</textarea></div>
-        <div class="form-group"><label>Keywords (comma separated)</label><input id="pKeywords" value="${escapeHtml(p.keywords || '')}"></div>
-        <div class="form-group"><label>Thumbnail Prompt</label><input id="pThumb" value="${escapeHtml(p.thumbnail_prompt || '')}"></div>
-        <button class="btn btn-primary" onclick="doPackaging('${p.id}')">Save Packaging</button>
-      </div>`;
+      html += '<div class="card" style="border-left:3px solid #f59e0b">'
+        + '<div class="card-title">Packaging</div>'
+        + '<div class="form-group"><label>Title</label><input id="pTitle" value="' + escapeHtml(p.title || '') + '"></div>'
+        + '<div class="form-group"><label>Description</label><textarea id="pDesc">' + escapeHtml(p.description || '') + '</textarea></div>'
+        + '<div class="form-group"><label>Keywords (comma separated)</label><input id="pKeywords" value="' + escapeHtml(p.keywords || '') + '"></div>'
+        + '<div class="form-group"><label>Thumbnail Prompt</label><input id="pThumb" value="' + escapeHtml(p.thumbnail_prompt || '') + '"></div>'
+        + '<button class="btn btn-primary" onclick="doPackaging(\'' + p.id + '\')">Save Packaging</button></div>';
     }
     
-    // STAGE: APPROVAL
     else if (p.stage === 'approval') {
-      html += `<div class="card" style="border-left:3px solid #22c55e">
-        <div class="card-title">Final Approval</div>
-        <div class="form-group"><label>Reviewer</label><input id="aReviewer" value="david"></div>
-        <div class="form-group"><label>Notes</label><textarea id="aNotes"></textarea></div>
-        <button class="btn btn-success" onclick="doApprove('${p.id}')">🚀 Final Approve</button>
-      </div>`;
+      html += '<div class="card" style="border-left:3px solid #22c55e">'
+        + '<div class="card-title">Final Approval</div>'
+        + '<div class="form-group"><label>Reviewer</label><input id="aReviewer" value="david"></div>'
+        + '<div class="form-group"><label>Notes</label><textarea id="aNotes"></textarea></div>'
+        + '<button class="btn btn-success" onclick="doApprove(\'' + p.id + '\')">🚀 Final Approve</button></div>';
     }
     
     else {
-      html += `<div class="card empty">No actions available at stage <strong>${STAGE_LABELS[p.stage]}</strong>. ${p.stage==='production'?'Production running in background...':''} ${p.stage==='assembly'?'Video assembling...':''} ${p.stage==='published'?'This production has been published.':''}</div>`;
+      html += '<div class="card empty">No actions available at stage <strong>' + STAGE_LABELS[p.stage] + '</strong>. '
+        + (p.stage==='production' ? 'Production running in background...' : '')
+        + (p.stage==='assembly' ? 'Video assembling...' : '')
+        + (p.stage==='published' ? 'This production has been published.' : '')
+        + '</div>';
     }
     
     html += '</div>';
@@ -389,7 +407,6 @@ function renderDetail() {
 
   app.innerHTML = html;
   
-  // Add context counter listener
   const ctx = document.getElementById('cContext');
   if (ctx) {
     ctx.addEventListener('input', function() {
@@ -400,6 +417,14 @@ function renderDetail() {
 }
 
 function setTab(tab) { currentTab = tab; renderDetail(); }
+
+async function doAutoResearch(id) {
+  try {
+    const res = await api('/productions/' + id + '/auto-research', { method: 'POST' });
+    alert(res.message || 'Draft saved. Review it on the Overview tab.');
+    loadDetail(id);
+  } catch (e) { alert('Error: ' + e.message); }
+}
 
 async function submitResearch(id) {
   const data = {
@@ -433,7 +458,7 @@ async function submitScript(id) {
       interpretation: document.getElementById('cInterp').value,
       confidence: document.getElementById('cConfidence').value,
       claim_type: document.getElementById('cType').value,
-      cross_references: document.getElementById('cCross').value.split(',').map(s => s.trim()).filter(Boolean),
+      cross_references: document.getElementById('cCross').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
       alternative_interpretations: document.getElementById('cAlt').value,
     }],
     scenes: [{
@@ -444,7 +469,6 @@ async function submitScript(id) {
     }]
   };
   
-  // Validate required fields
   if (!data.claims[0].claim_text || !data.claims[0].source_reference || !data.claims[0].source_text || !data.claims[0].interpretation) {
     alert('Please fill in all required claim fields (marked with *)');
     return;
@@ -464,7 +488,7 @@ async function runGate(id) {
   try {
     const res = await api('/productions/' + id + '/evidence', { method: 'POST' });
     if (res.decision === 'FAIL') {
-      alert('Evidence Gate FAILED:\n\n' + res.violations.map(v => '• ' + v.detail).join('\n') + '\n\nFix the issues and resubmit script.');
+      alert('Evidence Gate FAILED:\n\n' + res.violations.map(function(v){return '• ' + v.detail}).join('\n') + '\n\nFix the issues and resubmit script.');
     }
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
@@ -474,10 +498,7 @@ async function doReview(id, decision) {
   const reviewer = document.getElementById('reviewer').value;
   const notes = document.getElementById('reviewNotes').value;
   try {
-    await api('/productions/' + id + '/review', {
-      method: 'POST',
-      body: JSON.stringify({ decision, reviewer, notes })
-    });
+    await api('/productions/' + id + '/review', { method: 'POST', body: JSON.stringify({ decision: decision, reviewer: reviewer, notes: notes }) });
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
@@ -494,10 +515,7 @@ async function doQuality(id, decision) {
   const reviewer = document.getElementById('qReviewer').value;
   const notes = document.getElementById('qNotes').value;
   try {
-    await api('/productions/' + id + '/quality', {
-      method: 'POST',
-      body: JSON.stringify({ decision, reviewer, notes })
-    });
+    await api('/productions/' + id + '/quality', { method: 'POST', body: JSON.stringify({ decision: decision, reviewer: reviewer, notes: notes }) });
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
@@ -519,45 +537,39 @@ async function doApprove(id) {
   const reviewer = document.getElementById('aReviewer').value;
   const notes = document.getElementById('aNotes').value;
   try {
-    await api('/productions/' + id + '/approve', {
-      method: 'POST',
-      body: JSON.stringify({ decision: 'pass', reviewer, notes })
-    });
+    await api('/productions/' + id + '/approve', { method: 'POST', body: JSON.stringify({ decision: 'pass', reviewer: reviewer, notes: notes }) });
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
 
 function showNew() {
   const app = document.getElementById('app');
-  app.innerHTML = `
-    <button class="btn btn-outline" onclick="loadList()" style="margin-bottom:12px">← Back</button>
-    <div class="card" style="max-width:600px">
-      <div class="card-title">New Production</div>
-      <div class="form-group"><label>Topic *</label><input id="nTopic" placeholder="e.g., Who were the Nephilim?"></div>
-      <div class="form-group"><label>Source Question</label><input id="nQuestion" placeholder="e.g., YouTube comment asking..."></div>
-      <div class="form-group"><label>Doctrinal Category</label>
-        <select id="nCat">
-          <option value="general">General</option>
-          <option value="genesis_6">Genesis 6 / Nephilim</option>
-          <option value="sheol">Sheol / Afterlife</option>
-          <option value="spiritual_warfare">Spiritual Warfare</option>
-          <option value="demons">Demons</option>
-          <option value="election">Election / Predestination</option>
-          <option value="end_times">End Times / Prophecy</option>
-          <option value="divorce">Divorce / Remarriage</option>
-          <option value="women_ministry">Women in Ministry</option>
-          <option value="salvation">Salvation / Gospel</option>
-          <option value="character_of_god">Character of God</option>
-          <option value="prophecy_dating">Prophecy Date-Setting</option>
-        </select>
-      </div>
-      <div class="form-group"><label>Primary Scripture</label><input id="nScripture" placeholder="e.g., Genesis 6:1-4"></div>
-      <div class="form-group" style="display:flex;align-items:center;gap:8px">
-        <input type="checkbox" id="nGospel"> <label for="nGospel" style="margin:0">Gospel video (extra scrutiny)</label>
-      </div>
-      <button class="btn btn-primary" onclick="doCreate()">Create Production</button>
-    </div>
-  `;
+  app.innerHTML = ''
+    + '<button class="btn btn-outline" onclick="loadList()" style="margin-bottom:12px">← Back</button>'
+    + '<div class="card" style="max-width:600px">'
+    + '<div class="card-title">New Production</div>'
+    + '<div class="form-group"><label>Topic *</label><input id="nTopic" placeholder="e.g., Who were the Nephilim?"></div>'
+    + '<div class="form-group"><label>Source Question</label><input id="nQuestion" placeholder="e.g., YouTube comment asking..."></div>'
+    + '<div class="form-group"><label>Doctrinal Category</label><select id="nCat">'
+    + '<option value="general">General</option>'
+    + '<option value="genesis_6">Genesis 6 / Nephilim</option>'
+    + '<option value="sheol">Sheol / Afterlife</option>'
+    + '<option value="spiritual_warfare">Spiritual Warfare</option>'
+    + '<option value="demons">Demons</option>'
+    + '<option value="election">Election / Predestination</option>'
+    + '<option value="end_times">End Times / Prophecy</option>'
+    + '<option value="divorce">Divorce / Remarriage</option>'
+    + '<option value="women_ministry">Women in Ministry</option>'
+    + '<option value="salvation">Salvation / Gospel</option>'
+    + '<option value="character_of_god">Character of God</option>'
+    + '<option value="prophecy_dating">Prophecy Date-Setting</option>'
+    + '</select></div>'
+    + '<div class="form-group"><label>Primary Scripture</label><input id="nScripture" placeholder="e.g., Genesis 6:1-4"></div>'
+    + '<div class="form-group" style="display:flex;align-items:center;gap:8px">'
+    + '<input type="checkbox" id="nGospel"> <label for="nGospel" style="margin:0">Gospel video (extra scrutiny)</label>'
+    + '</div>'
+    + '<button class="btn btn-primary" onclick="doCreate()">Create Production</button>'
+    + '</div>';
 }
 
 async function doCreate() {
@@ -576,15 +588,14 @@ async function doCreate() {
 }
 
 function stageBadge(stage) {
-  return `<span class="badge badge-${stage}">${STAGE_LABELS[stage] || stage}</span>`;
+  return '<span class="badge badge-' + stage + '">' + (STAGE_LABELS[stage] || stage) + '</span>';
 }
 
 function escapeHtml(text) {
   if (!text) return '';
-  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// Load on start
 loadList();
 </script>
 
