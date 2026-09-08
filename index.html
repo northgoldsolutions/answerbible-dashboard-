@@ -321,6 +321,12 @@ function renderDetail() {
     }
     
     else if (p.stage === 'research') {
+      html += '<div class="card" style="border:1px dashed #f59e0b">'
+        + '<div class="card-title">⚡ Draft Claims & Scene with AI</div>'
+        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Uses your approved research to draft the claim, scripture text, context, interpretation, scene narration and visual prompt. Review and edit every field before submitting.</p>'
+        + '<button class="btn btn-primary" onclick="doAutoScript(\'' + p.id + '\')">⚡ Draft Claims & Scene</button>'
+        + '<div id="scriptStatus" style="margin-top:8px;font-size:0.8125rem;color:#94a3b8"></div>'
+        + '</div>';
       html += '<div class="card">'
         + '<div class="card-title">Submit Script & Claims</div>'
         + '<div class="card-title" style="margin-top:16px;font-size:1rem">Claim 1</div>'
@@ -429,6 +435,36 @@ async function doAutoResearch(id) {
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
+
+async function doAutoScript(id) {
+  const st = document.getElementById('scriptStatus');
+  st.textContent = '⚡ Drafting... (~30 sec)';
+  try {
+    const res = await api('/productions/' + id + '/auto-script', { method: 'POST' });
+    const d = res.draft || {};
+    setV('cText', d.claim_text);
+    setV('cSourceRef', d.source_reference);
+    setV('cSourceText', d.source_text);
+    setV('cLang', d.original_language);
+    setV('cContext', d.context);
+    setV('cInterp', d.interpretation);
+    if (d.confidence) document.getElementById('cConfidence').value = d.confidence;
+    if (d.claim_type) document.getElementById('cType').value = d.claim_type;
+    setV('cCross', (d.cross_references || []).join(', '));
+    setV('cAlt', d.alternative_interpretations);
+    setV('sNarration', d.narration_text);
+    setV('sVisual', d.visual_prompt);
+    const ctx = document.getElementById('cContext');
+    if (ctx) ctx.dispatchEvent(new Event('input'));
+    st.textContent = '✅ Draft filled — review every field, fix anything off, then submit.';
+    alert(res.message || 'Draft filled. Review before submitting.');
+  } catch (e) {
+    st.textContent = '';
+    alert('Error: ' + e.message);
+  }
+}
+
+function setV(id, v) { const el = document.getElementById(id); if (el && v) el.value = v; }
 
 async function submitResearch(id) {
   const data = {
