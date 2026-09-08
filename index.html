@@ -421,7 +421,11 @@ function setTab(tab) { currentTab = tab; renderDetail(); }
 async function doAutoResearch(id) {
   try {
     const res = await api('/productions/' + id + '/auto-research', { method: 'POST' });
-    alert(res.message || 'Draft saved. Review it on the Overview tab.');
+    let msg = res.message || 'Draft saved. Review it on the Overview tab.';
+    const d = res.draft || {};
+    if (d.suggested_title) msg += '\n\n🎬 Theme: ' + d.suggested_title;
+    if (d.suggested_scripture) msg += '\n📖 Scripture: ' + d.suggested_scripture;
+    alert(msg);
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
@@ -548,8 +552,23 @@ function showNew() {
     + '<button class="btn btn-outline" onclick="loadList()" style="margin-bottom:12px">← Back</button>'
     + '<div class="card" style="max-width:600px">'
     + '<div class="card-title">New Production</div>'
-    + '<div class="form-group"><label>Topic *</label><input id="nTopic" placeholder="e.g., Who were the Nephilim?"></div>'
-    + '<div class="form-group"><label>Source Question</label><input id="nQuestion" placeholder="e.g., YouTube comment asking..."></div>'
+    + '<div class="form-group"><label>Type your line / question *</label><input id="nTopic" placeholder="e.g., Who were the Nephilim in Genesis 6?"></div>'
+    + '<button class="btn btn-outline" onclick="doAiFill()">⚡ Research This Line & Fill Boxes</button>'
+    + '<div id="aiStatus" style="margin-top:8px;font-size:0.8125rem;color:#94a3b8"></div>'
+    + '<div id="draftWrap" style="display:none">'
+    + '<hr style="border:none;border-top:1px solid #334155;margin:16px 0">'
+    + '<div id="aiTheme" style="padding:10px;background:#0f172a;border:1px solid #334155;border-radius:6px;margin-bottom:12px;font-size:0.875rem"></div>'
+    + '<div class="form-group"><label>Hook</label><textarea id="rHook"></textarea></div>'
+    + '<div class="form-group"><label>Problem</label><textarea id="rProblem"></textarea></div>'
+    + '<div class="form-group"><label>Explanation</label><textarea id="rExplanation"></textarea></div>'
+    + '<div class="form-group"><label>Story</label><textarea id="rStory"></textarea></div>'
+    + '<div class="form-group"><label>Application</label><textarea id="rApplication"></textarea></div>'
+    + '<div class="form-group"><label>CTA</label><textarea id="rCta"></textarea></div>'
+    + '</div>'
+    + '</div>'
+    + '<div class="card" style="max-width:600px;display:none" id="detailsCard">'
+    + '<div class="card-title">Details — edit & approve</div>'
+    + '<div class="form-group"><label>Primary Scripture</label><input id="nScripture" placeholder="e.g., Genesis 6:1-4"></div>'
     + '<div class="form-group"><label>Doctrinal Category</label><select id="nCat">'
     + '<option value="general">General</option>'
     + '<option value="genesis_6">Genesis 6 / Nephilim</option>'
@@ -564,25 +583,71 @@ function showNew() {
     + '<option value="character_of_god">Character of God</option>'
     + '<option value="prophecy_dating">Prophecy Date-Setting</option>'
     + '</select></div>'
-    + '<div class="form-group"><label>Primary Scripture</label><input id="nScripture" placeholder="e.g., Genesis 6:1-4"></div>'
+    + '<div class="form-group"><label>Source Question</label><input id="nQuestion" placeholder="e.g., YouTube comment asking..."></div>'
     + '<div class="form-group" style="display:flex;align-items:center;gap:8px">'
     + '<input type="checkbox" id="nGospel"> <label for="nGospel" style="margin:0">Gospel video (extra scrutiny)</label>'
     + '</div>'
-    + '<button class="btn btn-primary" onclick="doCreate()">Create Production</button>'
+    + '<button class="btn btn-success" onclick="doCreate()">✓ Approve & Create Production</button>'
     + '</div>';
 }
 
+function fv(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+
+async function doAiFill() {
+  const topic = fv('nTopic').trim();
+  if (!topic) { alert('Type your line or question first'); return; }
+  const st = document.getElementById('aiStatus');
+  st.textContent = '⚡ Researching... (~30 sec)';
+  let tempId = null;
+  try {
+    const tmp = await api('/productions', { method: 'POST', body: JSON.stringify({ topic: topic, doctrinal_category: 'general', gospel_video: false }) });
+    tempId = tmp.id;
+    const res = await api('/productions/' + tempId + '/auto-research', { method: 'POST' });
+    try { await api('/productions/' + tempId, { method: 'DELETE' }); } catch (e2) {}
+    tempId = null;
+    const d = res.draft || {};
+    document.getElementById('rHook').value = d.hook || '';
+    document.getElementById('rProblem').value = d.problem || '';
+    document.getElementById('rExplanation').value = d.explanation || '';
+    document.getElementById('rStory').value = d.story || '';
+    document.getElementById('rApplication').value = d.application || '';
+    document.getElementById('rCta').value = d.cta || '';
+    let theme = '';
+    if (d.suggested_title) theme += '<strong>🎬 Theme:</strong> ' + escapeHtml(d.suggested_title) + '<br>';
+    if (d.suggested_scripture) theme += '<strong>📖 Scripture:</strong> ' + escapeHtml(d.suggested_scripture) + ' ';
+    theme += '<span style="color:#94a3b8">— suggestions applied below, edit freely</span>';
+    document.getElementById('aiTheme').innerHTML = theme;
+    if (d.suggested_scripture) document.getElementById('nScripture').value = d.suggested_scripture;
+    if (d.suggested_category) document.getElementById('nCat').value = d.suggested_category;
+    document.getElementById('draftWrap').style.display = 'block';
+    document.getElementById('detailsCard').style.display = 'block';
+    st.textContent = '✅ Draft ready — review, edit anything, then approve below.';
+  } catch (e) {
+    if (tempId) { try { await api('/productions/' + tempId, { method: 'DELETE' }); } catch (e2) {} }
+    st.textContent = '';
+    alert('Error: ' + e.message);
+  }
+}
+
 async function doCreate() {
+  const topic = fv('nTopic').trim();
+  if (!topic) { alert('Type your line or question first'); return; }
   const data = {
-    topic: document.getElementById('nTopic').value,
-    source_question: document.getElementById('nQuestion').value,
-    doctrinal_category: document.getElementById('nCat').value,
-    primary_scripture: document.getElementById('nScripture').value,
-    gospel_video: document.getElementById('nGospel').checked,
+    topic: topic,
+    source_question: fv('nQuestion'),
+    doctrinal_category: fv('nCat') || 'general',
+    primary_scripture: fv('nScripture'),
+    gospel_video: document.getElementById('nGospel') ? document.getElementById('nGospel').checked : false,
   };
-  if (!data.topic) { alert('Topic is required'); return; }
   try {
     const res = await api('/productions', { method: 'POST', body: JSON.stringify(data) });
+    const research = {
+      hook: fv('rHook'), problem: fv('rProblem'), explanation: fv('rExplanation'),
+      story: fv('rStory'), application: fv('rApplication'), cta: fv('rCta')
+    };
+    if (research.hook || research.problem || research.explanation || research.story || research.application || research.cta) {
+      await api('/productions/' + res.id + '/research', { method: 'POST', body: JSON.stringify(research) });
+    }
     loadDetail(res.id);
   } catch (e) { alert('Error: ' + e.message); }
 }
