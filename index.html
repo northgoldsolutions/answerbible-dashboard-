@@ -21,6 +21,7 @@
   .btn-success { background: #22c55e; color: white; }
   .btn-danger { background: #ef4444; color: white; }
   .btn-outline { background: transparent; border: 1px solid #334155; color: #f8fafc; }
+  .btn-small { padding: 5px 10px; font-size: 0.75rem; }
   .card {
     background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 12px;
   }
@@ -43,6 +44,7 @@
   .badge-pass { background: #064e3b; color: #34d399; }
   .badge-fail { background: #450a0a; color: #f87171; }
   .badge-pending { background: #3f3f00; color: #facc15; }
+  .badge-format { background: #164e63; color: #67e8f9; }
   table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
   th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #334155; }
   th { color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; }
@@ -74,6 +76,11 @@
   .empty { text-align: center; padding: 40px; color: #94a3b8; }
   .success { color: #22c55e; padding: 12px; background: #064e3b; border-radius: 6px; margin-bottom: 12px; font-size: 0.875rem; }
   .hint { font-size: 0.75rem; color: #94a3b8; margin-top: 4px; }
+  .editor-block { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  .editor-block-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .editor-block-head strong { color: #f59e0b; font-size: 0.875rem; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 640px) { .row-2 { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -115,6 +122,9 @@ const STAGE_LABELS = {
 
 let currentProd = null;
 let currentTab = 'overview';
+// Script editor state (multi-claim / multi-scene)
+let editClaims = [];
+let editScenes = [];
 
 async function loadList() {
   const app = document.getElementById('app');
@@ -127,17 +137,26 @@ async function loadList() {
   }
 }
 
+function formatBadge(p) {
+  const fmt = p.video_format || 'short';
+  const o = p.orientation || '';
+  let label = fmt === 'episode' ? '🎬 Episode' : '⚡ Short';
+  if (o === 'vertical') label += ' · 9:16';
+  else if (o === 'landscape') label += ' · 16:9';
+  return '<span class="badge badge-format">' + label + '</span>';
+}
+
 function renderList(prods) {
   const app = document.getElementById('app');
   if (!prods.length) {
     app.innerHTML = '<div class="empty">No productions yet. Tap "+ New Production" to start.</div>';
     return;
   }
-  let html = '<div class="card"><table><thead><tr><th>Topic</th><th>Category</th><th>Scripture</th><th>Stage</th><th style="width:50px"></th></tr></thead><tbody>';
+  let html = '<div class="card"><table><thead><tr><th>Topic</th><th>Format</th><th>Scripture</th><th>Stage</th><th style="width:50px"></th></tr></thead><tbody>';
   for (const p of prods) {
     html += '<tr style="cursor:pointer" onclick="loadDetail(\'' + p.id + '\')">'
       + '<td><strong>' + escapeHtml(p.topic) + '</strong></td>'
-      + '<td style="text-transform:capitalize">' + (p.doctrinal_category ? p.doctrinal_category.replace(/_/g,' ') : '') + '</td>'
+      + '<td>' + formatBadge(p) + '</td>'
       + '<td>' + (p.primary_scripture || '—') + '</td>'
       + '<td>' + stageBadge(p.stage) + '</td>'
       + '<td><button class="btn btn-danger" style="padding:4px 8px;font-size:0.75rem" title="Delete production" onclick="event.stopPropagation();doDelete(\'' + p.id + '\')">🗑</button></td>'
@@ -189,7 +208,10 @@ function videoHtml(p) {
   if (p.captions_url) captionsSrc = p.captions_url.indexOf('http') === 0 ? p.captions_url : API_BASE + p.captions_url;
   else if (p.has_video) captionsSrc = API_BASE + '/api/download-captions/' + p.id;
   if (!videoSrc) return '';
-  let h = '<video controls preload="metadata" src="' + videoSrc + '" style="width:100%;border-radius:6px;background:#000;margin-top:12px"></video>'
+  const isVert = (p.effective_orientation || p.orientation) === 'vertical';
+  let h = '<video controls preload="metadata" src="' + videoSrc + '" style="'
+    + (isVert ? 'max-height:520px;width:auto;max-width:100%;display:block;margin:12px auto 0' : 'width:100%;margin-top:12px')
+    + ';border-radius:6px;background:#000"></video>'
     + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
     + '<a class="btn btn-primary" style="text-decoration:none" href="' + videoSrc + '" download>⬇ Download Video</a>';
   if (captionsSrc) h += '<a class="btn btn-outline" style="text-decoration:none" href="' + captionsSrc + '" download>⬇ Captions (.srt)</a>';
@@ -222,7 +244,8 @@ function renderDetail() {
     + (p.gospel_video ? '⛪ Gospel | ' : '')
     + 'Approved: ' + (p.approved_by || '—')
     + '</div></div>'
-    + '<div style="display:flex;gap:6px;align-items:center">'
+    + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+    + formatBadge(p)
     + stageBadge(p.stage)
     + '<button class="btn btn-danger" onclick="doDelete(\'' + p.id + '\')">🗑 Delete</button>'
     + '</div></div>'
@@ -286,11 +309,14 @@ function renderDetail() {
   }
 
   if (currentTab === 'scenes') {
-    html += '<div class="card"><div class="card-title">Scenes</div>';
+    html += '<div class="card"><div class="card-title">Scenes (' + p.scenes.length + ')</div>';
     if (!p.scenes.length) html += '<div class="empty">No scenes submitted yet.</div>';
     for (const s of p.scenes) {
+      const words = (s.narration_text || '').split(/\s+/).filter(Boolean).length;
+      const estSec = Math.round(words / 2.5);
       html += '<div class="claim-card" style="border-left-color:#334155">'
-        + '<div style="font-weight:700;margin-bottom:4px">Scene ' + (s.order + 1) + '</div>'
+        + '<div style="font-weight:700;margin-bottom:4px">Scene ' + (s.order + 1)
+        + ' <span style="font-weight:400;color:#94a3b8;font-size:0.75rem">~' + estSec + 's narration</span></div>'
         + '<div style="font-size:0.875rem;margin-bottom:4px">' + escapeHtml(s.narration_text || '(no narration)') + '</div>'
         + '<div style="font-size:0.75rem;color:#94a3b8;font-style:italic">' + escapeHtml(s.visual_prompt || '') + '</div>'
         + '<div style="margin-top:6px"><span class="badge badge-' + s.status + '">' + s.status + '</span>' + (s.locked ? ' <span class="badge" style="background:#334155">Locked</span>' : '') + '</div>'
@@ -301,7 +327,7 @@ function renderDetail() {
 
   if (currentTab === 'actions') {
     html += '<div id="actions-panel">';
-    
+
     if (p.stage === 'discovery') {
       html += '<div class="card" style="border:1px dashed #f59e0b">'
         + '<div class="card-title">⚡ Auto-Research</div>'
@@ -319,61 +345,63 @@ function renderDetail() {
         + '<button class="btn btn-primary" onclick="submitResearch(\'' + p.id + '\')">Submit Research</button>'
         + '</div>';
     }
-    
-    else if (p.stage === 'research') {
+
+    else if (p.stage === 'research' || p.stage === 'script') {
+      const isEpisode = (p.video_format || 'short') === 'episode';
+      const isRepair = p.stage === 'script';
+      if (isRepair) {
+        html += '<div class="card"><div class="card-title">Run Evidence Gate</div>'
+          + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Script is locked in. Run the 12 theological blockers against all claims.</p>'
+          + '<button class="btn btn-primary" onclick="runGate(\'' + p.id + '\')">Run Evidence Gate</button></div>';
+      }
       html += '<div class="card" style="border:1px dashed #f59e0b">'
-        + '<div class="card-title">⚡ Draft Claims & Scene with AI</div>'
-        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Uses your approved research to draft the claim, scripture text, context, interpretation, scene narration and visual prompt. Review and edit every field before submitting.</p>'
-        + '<button class="btn btn-primary" onclick="doAutoScript(\'' + p.id + '\')">⚡ Draft Claims & Scene</button>'
+        + '<div class="card-title">⚡ Draft ' + (isEpisode ? 'Multi-Scene Episode' : 'Claims & Scene') + ' with AI</div>'
+        + (isRepair ? '<div class="success" style="background:#450a0a;color:#fca5a5">🔧 Sent back for repair — your previous claims & scenes are pre-filled below. Edit and resubmit.</div>' : '')
+        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">'
+        + (isEpisode
+          ? 'Generates ' + (p.scene_count || 6) + ' scenes (hook → body → CTA, ~' + Math.round((p.scene_count||6)*0.75) + ' min) plus the claims to back them. Review and edit EVERYTHING before submitting.'
+          : 'Uses your approved research to draft the claim, scripture text, context, interpretation, scene narration and visual prompt. Review and edit every field before submitting.')
+        + '</p>'
+        + '<button class="btn btn-primary" onclick="doAutoScript(\'' + p.id + '\')">⚡ Draft Script</button>'
         + '<div id="scriptStatus" style="margin-top:8px;font-size:0.8125rem;color:#94a3b8"></div>'
         + '</div>';
       html += '<div class="card">'
-        + '<div class="card-title">Submit Script & Claims</div>'
-        + '<div class="card-title" style="margin-top:16px;font-size:1rem">Claim 1</div>'
-        + '<div class="form-group"><label>Claim Text *</label><input id="cText" placeholder="The theological claim you are making"></div>'
-        + '<div class="form-group"><label>Source Reference *</label><input id="cSourceRef" placeholder="e.g., Genesis 6:2"></div>'
-        + '<div class="form-group"><label>Source Text *</label><textarea id="cSourceText" placeholder="The actual biblical text"></textarea></div>'
-        + '<div class="form-group"><label>Original Language</label><input id="cLang" placeholder="e.g., Hebrew"></div>'
-        + '<div class="form-group"><label>Context * (min 50 chars required)</label><textarea id="cContext" placeholder="Historical, literary, cultural context. MUST be 50+ characters or gate will block."></textarea><div class="hint" id="contextCount">0 characters</div></div>'
-        + '<div class="form-group"><label>Interpretation *</label><textarea id="cInterp" placeholder="Your exegesis of this passage"></textarea></div>'
-        + '<div class="form-group"><label>Confidence</label><select id="cConfidence"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></div>'
-        + '<div class="form-group"><label>Claim Type</label><select id="cType"><option value="scripture">Scripture (direct biblical statement)</option><option value="strong_inference">Strong Inference</option><option value="traditional">Traditional Interpretation</option><option value="scholarly" selected>Scholarly Opinion</option><option value="speculation">Speculation (cannot present as fact)</option></select></div>'
-        + '<div class="form-group"><label>Cross References (comma separated)</label><input id="cCross" placeholder="Job 1:6, Job 38:7, Psalm 82:6"></div>'
-        + '<div class="form-group"><label>Alternative Interpretations</label><textarea id="cAlt" placeholder="Other views to acknowledge"></textarea></div>'
-        + '<div class="card-title" style="margin-top:20px;font-size:1rem">Scene 1</div>'
-        + '<div class="form-group"><label>Narration Text *</label><textarea id="sNarration" placeholder="What the voiceover says"></textarea></div>'
-        + '<div class="form-group"><label>Visual Prompt *</label><input id="sVisual" placeholder="e.g., Ancient scroll unfurling, dark atmosphere"></div>'
-        + '<button class="btn btn-primary" onclick="submitScript(\'' + p.id + '\')">Submit Script & Claims</button>'
+        + '<div class="card-title">Script Editor'
+        + '<span style="float:right">'
+        + '<button class="btn btn-outline btn-small" onclick="addClaimEditor()">+ Claim</button> '
+        + '<button class="btn btn-outline btn-small" onclick="addSceneEditor()">+ Scene</button>'
+        + '</span></div>'
+        + '<div id="claimsEditor"></div>'
+        + '<div id="scenesEditor"></div>'
+        + '<button class="btn btn-success" onclick="submitScript(\'' + p.id + '\')">✓ Submit Script & Claims</button>'
+        + '<div class="hint">Gate reminders: every claim needs scripture text + 50+ chars of context. "Scripture"/"Strong inference" claims need cross-refs. Never use the "speculation" type — the gate hard-fails it; use "scholarly" with hedged wording instead.</div>'
         + '</div>';
     }
-    
-    else if (p.stage === 'script') {
-      html += '<div class="card"><div class="card-title">Run Evidence Gate</div>'
-        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Run the 12 theological blockers against all claims.</p>'
-        + '<button class="btn btn-primary" onclick="runGate(\'' + p.id + '\')">Run Evidence Gate</button></div>';
-    }
-    
+
     else if (p.stage === 'evidence_gate') {
       html += '<div class="card" style="border-left:3px solid #f59e0b">'
         + '<div class="card-title">🛡️ Human Review Required</div>'
-        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">This production requires your explicit approval.</p>'
+        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">This production requires your explicit approval. Check the Claims tab — anything red failed the gate.</p>'
         + '<div class="form-group"><label>Reviewer</label><input id="reviewer" value="david"></div>'
         + '<div class="form-group"><label>Notes</label><textarea id="reviewNotes" placeholder="Approval notes..."></textarea></div>'
-        + '<div style="display:flex;gap:8px">'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
         + '<button class="btn btn-success" onclick="doReview(\'' + p.id + '\',\'pass\')">✓ Approve</button>'
-        + '<button class="btn btn-danger" onclick="doReview(\'' + p.id + '\',\'repair\')">Send Back</button>'
+        + '<button class="btn btn-danger" onclick="doReview(\'' + p.id + '\',\'repair\')">↩ Send Back to Script</button>'
         + '</div></div>';
     }
-    
+
     else if (p.stage === 'human_review') {
       html += '<div class="card"><div class="card-title">Start Production</div>'
-        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Generate TTS, visuals, and assemble video.</p>'
+        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Generate TTS, visuals, and assemble video.'
+        + ((p.video_format === 'episode') ? ' <strong>Episode mode: ' + p.scenes.length + ' scenes — production may take 10-30 minutes.</strong>' : '')
+        + '</p>'
         + '<button class="btn btn-primary" onclick="doProduce(\'' + p.id + '\')">Start Production</button></div>';
     }
-    
+
     else if (p.stage === 'quality_gate') {
       html += '<div class="card" style="border-left:3px solid #3b82f6">'
         + '<div class="card-title">Quality Gate</div>'
+        + '<p style="color:#94a3b8;font-size:0.875rem;margin-bottom:12px">Watch the video above. "Needs Repair" sends it back to Human Review so you can re-run production.</p>'
         + '<div class="form-group"><label>Reviewer</label><input id="qReviewer" value="david"></div>'
         + '<div class="form-group"><label>Notes</label><textarea id="qNotes"></textarea></div>'
         + '<div style="display:flex;gap:8px">'
@@ -381,7 +409,7 @@ function renderDetail() {
         + '<button class="btn btn-danger" onclick="doQuality(\'' + p.id + '\',\'repair\')">Needs Repair</button>'
         + '</div></div>';
     }
-    
+
     else if (p.stage === 'packaging') {
       html += '<div class="card" style="border-left:3px solid #f59e0b">'
         + '<div class="card-title">Packaging</div>'
@@ -391,7 +419,7 @@ function renderDetail() {
         + '<div class="form-group"><label>Thumbnail Prompt</label><input id="pThumb" value="' + escapeHtml(p.thumbnail_prompt || '') + '"></div>'
         + '<button class="btn btn-primary" onclick="doPackaging(\'' + p.id + '\')">Save Packaging</button></div>';
     }
-    
+
     else if (p.stage === 'approval') {
       html += '<div class="card" style="border-left:3px solid #22c55e">'
         + '<div class="card-title">Final Approval</div>'
@@ -399,30 +427,152 @@ function renderDetail() {
         + '<div class="form-group"><label>Notes</label><textarea id="aNotes"></textarea></div>'
         + '<button class="btn btn-success" onclick="doApprove(\'' + p.id + '\')">🚀 Final Approve</button></div>';
     }
-    
+
     else {
       html += '<div class="card empty">No actions available at stage <strong>' + STAGE_LABELS[p.stage] + '</strong>. '
-        + (p.stage==='production' ? 'Production running in background...' : '')
+        + (p.stage==='production' ? 'Production running in background — ' + p.scenes.length + ' scene(s). Check back in a few minutes.' : '')
         + (p.stage==='assembly' ? 'Video assembling...' : '')
         + (p.stage==='published' ? 'This production has been published.' : '')
         + '</div>';
     }
-    
+
     html += '</div>';
   }
 
   app.innerHTML = html;
-  
-  const ctx = document.getElementById('cContext');
-  if (ctx) {
-    ctx.addEventListener('input', function() {
-      document.getElementById('contextCount').textContent = this.value.length + ' characters' + (this.value.length < 50 ? ' (need 50+)' : ' ✓');
-      document.getElementById('contextCount').style.color = this.value.length < 50 ? '#ef4444' : '#22c55e';
-    });
+
+  // Render the script editor (research / script stages)
+  if ((p.stage === 'research' || p.stage === 'script') && currentTab === 'actions') {
+    if (!editClaims.length && !editScenes.length) {
+      prefillScriptEditor(p);
+    }
+    renderScriptEditors();
   }
 }
 
 function setTab(tab) { currentTab = tab; renderDetail(); }
+
+// ============ MULTI-SCENE SCRIPT EDITOR ============
+
+function emptyClaim() {
+  return { claim_text:'', source_reference:'', source_text:'', original_language:'Hebrew',
+           context:'', interpretation:'', confidence:'medium', claim_type:'scholarly',
+           cross_references:'', alternative_interpretations:'' };
+}
+function emptyScene() {
+  return { narration_text:'', visual_prompt:'', claim_index:0 };
+}
+
+function prefillScriptEditor(p) {
+  // Pre-fill from existing claims/scenes (repair path) or start with one of each.
+  if (p.claims && p.claims.length) {
+    editClaims = p.claims.map(c => ({
+      claim_text: c.text || '', source_reference: c.source_reference || '',
+      source_text: c.source_text || '', original_language: c.original_language || 'Hebrew',
+      context: c.context || '', interpretation: c.interpretation || '',
+      confidence: c.confidence || 'medium',
+      claim_type: (c.type === 'speculation' || c.type === 'scholarly_opinion') ? 'scholarly'
+                  : (c.type === 'traditional_interpretation') ? 'traditional'
+                  : (c.type || 'scholarly'),
+      cross_references: (c.cross_references || []).join(', '),
+      alternative_interpretations: c.alternative_interpretations || ''
+    }));
+  } else {
+    editClaims = [emptyClaim()];
+  }
+  if (p.scenes && p.scenes.length) {
+    editScenes = p.scenes.map(s => ({
+      narration_text: s.narration_text || '', visual_prompt: s.visual_prompt || '', claim_index: 0
+    }));
+  } else {
+    editScenes = [emptyScene()];
+  }
+}
+
+function renderScriptEditors() {
+  const ce = document.getElementById('claimsEditor');
+  const se = document.getElementById('scenesEditor');
+  if (!ce || !se) return;
+
+  let ch = '';
+  editClaims.forEach((c, i) => {
+    ch += '<div class="editor-block">'
+      + '<div class="editor-block-head"><strong>Claim ' + (i+1) + '</strong>'
+      + (editClaims.length > 1 ? '<button class="btn btn-danger btn-small" onclick="removeClaimEditor(' + i + ')">✕ Remove</button>' : '')
+      + '</div>'
+      + '<div class="form-group"><label>Claim Text *</label><textarea id="cl' + i + '_text">' + escapeHtml(c.claim_text) + '</textarea></div>'
+      + '<div class="row-2">'
+      + '<div class="form-group"><label>Source Reference *</label><input id="cl' + i + '_ref" value="' + escapeHtml(c.source_reference) + '" placeholder="e.g., Genesis 6:2"></div>'
+      + '<div class="form-group"><label>Original Language</label><input id="cl' + i + '_lang" value="' + escapeHtml(c.original_language) + '"></div>'
+      + '</div>'
+      + '<div class="form-group"><label>Source Text * (exact verse)</label><textarea id="cl' + i + '_src">' + escapeHtml(c.source_text) + '</textarea></div>'
+      + '<div class="form-group"><label>Context * (min 50 chars) — <span id="cl' + i + '_ctxcount">' + (c.context||'').length + '</span></label>'
+      + '<textarea id="cl' + i + '_ctx" oninput="document.getElementById(\'cl' + i + '_ctxcount\').textContent=this.value.length">' + escapeHtml(c.context) + '</textarea></div>'
+      + '<div class="form-group"><label>Interpretation *</label><textarea id="cl' + i + '_interp">' + escapeHtml(c.interpretation) + '</textarea></div>'
+      + '<div class="row-2">'
+      + '<div class="form-group"><label>Confidence</label><select id="cl' + i + '_conf">'
+      + ['high','medium','low'].map(v => '<option value="' + v + '"' + (c.confidence===v?' selected':'') + '>' + v + '</option>').join('')
+      + '</select></div>'
+      + '<div class="form-group"><label>Claim Type</label><select id="cl' + i + '_type">'
+      + [['scripture','Scripture (direct statement)'],['strong_inference','Strong Inference'],['traditional','Traditional'],['scholarly','Scholarly Opinion']]
+        .map(pair => '<option value="' + pair[0] + '"' + (c.claim_type===pair[0]?' selected':'') + '>' + pair[1] + '</option>').join('')
+      + '</select></div>'
+      + '</div>'
+      + '<div class="form-group"><label>Cross References (comma separated — required for scripture/inference)</label><input id="cl' + i + '_cross" value="' + escapeHtml(c.cross_references) + '"></div>'
+      + '<div class="form-group"><label>Alternative Interpretations</label><textarea id="cl' + i + '_alt">' + escapeHtml(c.alternative_interpretations) + '</textarea></div>'
+      + '</div>';
+  });
+  ce.innerHTML = ch;
+
+  let sh = '';
+  editScenes.forEach((s, i) => {
+    const words = (s.narration_text || '').split(/\s+/).filter(Boolean).length;
+    sh += '<div class="editor-block">'
+      + '<div class="editor-block-head"><strong>Scene ' + (i+1) + '</strong>'
+      + '<span>'
+      + (i > 0 ? '<button class="btn btn-outline btn-small" onclick="moveScene(' + i + ',-1)">↑</button> ' : '')
+      + (i < editScenes.length - 1 ? '<button class="btn btn-outline btn-small" onclick="moveScene(' + i + ',1)">↓</button> ' : '')
+      + (editScenes.length > 1 ? '<button class="btn btn-danger btn-small" onclick="removeSceneEditor(' + i + ')">✕</button>' : '')
+      + '</span></div>'
+      + '<div class="form-group"><label>Narration * — <span id="sc' + i + '_words">' + words + ' words (~' + Math.round(words/2.5) + 's)</span></label>'
+      + '<textarea id="sc' + i + '_narr" style="min-height:120px" oninput="var w=this.value.split(/\\s+/).filter(Boolean).length;document.getElementById(\'sc' + i + '_words\').textContent=w+\' words (~\'+Math.round(w/2.5)+\'s)\'">' + escapeHtml(s.narration_text) + '</textarea></div>'
+      + '<div class="form-group"><label>Visual Prompt *</label><textarea id="sc' + i + '_vis">' + escapeHtml(s.visual_prompt) + '</textarea></div>'
+      + '<div class="form-group"><label>Linked Claim # (1-based)</label><input type="number" min="1" max="' + editClaims.length + '" id="sc' + i + '_claim" value="' + (s.claim_index + 1) + '"></div>'
+      + '</div>';
+  });
+  se.innerHTML = sh;
+}
+
+function collectScriptEditors() {
+  editClaims = editClaims.map((c, i) => ({
+    claim_text: gv('cl' + i + '_text'), source_reference: gv('cl' + i + '_ref'),
+    source_text: gv('cl' + i + '_src'), original_language: gv('cl' + i + '_lang'),
+    context: gv('cl' + i + '_ctx'), interpretation: gv('cl' + i + '_interp'),
+    confidence: gv('cl' + i + '_conf'), claim_type: gv('cl' + i + '_type'),
+    cross_references: gv('cl' + i + '_cross'),
+    alternative_interpretations: gv('cl' + i + '_alt')
+  }));
+  editScenes = editScenes.map((s, i) => ({
+    narration_text: gv('sc' + i + '_narr'), visual_prompt: gv('sc' + i + '_vis'),
+    claim_index: Math.max(0, (parseInt(gv('sc' + i + '_claim')) || 1) - 1)
+  }));
+}
+
+function gv(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+
+function addClaimEditor() { collectScriptEditors(); editClaims.push(emptyClaim()); renderScriptEditors(); }
+function removeClaimEditor(i) { collectScriptEditors(); editClaims.splice(i, 1); renderScriptEditors(); }
+function addSceneEditor() { collectScriptEditors(); editScenes.push(emptyScene()); renderScriptEditors(); }
+function removeSceneEditor(i) { collectScriptEditors(); editScenes.splice(i, 1); renderScriptEditors(); }
+function moveScene(i, dir) {
+  collectScriptEditors();
+  const j = i + dir;
+  if (j < 0 || j >= editScenes.length) return;
+  const t = editScenes[i]; editScenes[i] = editScenes[j]; editScenes[j] = t;
+  renderScriptEditors();
+}
+
+// ============ ACTIONS ============
 
 async function doAutoResearch(id) {
   try {
@@ -432,95 +582,111 @@ async function doAutoResearch(id) {
     if (d.suggested_title) msg += '\n\n🎬 Theme: ' + d.suggested_title;
     if (d.suggested_scripture) msg += '\n📖 Scripture: ' + d.suggested_scripture;
     alert(msg);
+    editClaims = []; editScenes = [];
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function doAutoScript(id) {
   const st = document.getElementById('scriptStatus');
-  st.textContent = '⚡ Drafting... (~30 sec)';
+  const isEpisode = currentProd && currentProd.video_format === 'episode';
+  st.textContent = isEpisode ? '⚡ Drafting multi-scene episode... (~60-90 sec)' : '⚡ Drafting... (~30 sec)';
+  collectScriptEditorsSafe();
   try {
     const res = await api('/productions/' + id + '/auto-script', { method: 'POST' });
     const d = res.draft || {};
-    setV('cText', d.claim_text);
-    setV('cSourceRef', d.source_reference);
-    setV('cSourceText', d.source_text);
-    setV('cLang', d.original_language);
-    setV('cContext', d.context);
-    setV('cInterp', d.interpretation);
-    if (d.confidence) document.getElementById('cConfidence').value = d.confidence;
-    if (d.claim_type) document.getElementById('cType').value = d.claim_type;
-    setV('cCross', (d.cross_references || []).join(', '));
-    setV('cAlt', d.alternative_interpretations);
-    setV('sNarration', d.narration_text);
-    setV('sVisual', d.visual_prompt);
-    const ctx = document.getElementById('cContext');
-    if (ctx) ctx.dispatchEvent(new Event('input'));
-    st.textContent = '✅ Draft filled — review every field, fix anything off, then submit.';
-    alert(res.message || 'Draft filled. Review before submitting.');
+    if (d.multi || d.scenes) {
+      // Episode draft: claims[] + scenes[]
+      editClaims = (d.claims || []).map(c => ({
+        claim_text: c.claim_text || '', source_reference: c.source_reference || '',
+        source_text: c.source_text || '', original_language: c.original_language || 'Hebrew',
+        context: c.context || '', interpretation: c.interpretation || '',
+        confidence: c.confidence || 'medium', claim_type: c.claim_type || 'scholarly',
+        cross_references: (c.cross_references || []).join(', '),
+        alternative_interpretations: c.alternative_interpretations || ''
+      }));
+      if (!editClaims.length) editClaims = [emptyClaim()];
+      editScenes = (d.scenes || []).map(s => ({
+        narration_text: s.narration_text || '', visual_prompt: s.visual_prompt || '',
+        claim_index: s.claim_index || 0
+      }));
+      if (!editScenes.length) editScenes = [emptyScene()];
+      st.textContent = '✅ Episode draft: ' + editScenes.length + ' scenes (~' + (d.estimated_minutes || '?') + ' min), ' + editClaims.length + ' claim(s). Review every field, then submit.';
+      alert('Episode draft ready: ' + editScenes.length + ' scenes, ' + editClaims.length + ' claim(s).\n\nReview EVERY scene and claim below before submitting — the AI pre-fills, you verify.');
+    } else {
+      // Short draft: single claim + single scene
+      editClaims = [{
+        claim_text: d.claim_text || '', source_reference: d.source_reference || '',
+        source_text: d.source_text || '', original_language: d.original_language || 'Hebrew',
+        context: d.context || '', interpretation: d.interpretation || '',
+        confidence: d.confidence || 'medium', claim_type: d.claim_type || 'scholarly',
+        cross_references: (d.cross_references || []).join(', '),
+        alternative_interpretations: d.alternative_interpretations || ''
+      }];
+      editScenes = [{ narration_text: d.narration_text || '', visual_prompt: d.visual_prompt || '', claim_index: 0 }];
+      st.textContent = '✅ Draft filled — review every field, fix anything off, then submit.';
+    }
+    renderScriptEditors();
   } catch (e) {
     st.textContent = '';
     alert('Error: ' + e.message);
   }
 }
 
-function setV(id, v) { const el = document.getElementById(id); if (el && v) el.value = v; }
+function collectScriptEditorsSafe() {
+  // Only collect if the editor fields are actually rendered
+  if (document.getElementById('cl0_text')) collectScriptEditors();
+}
 
 async function submitResearch(id) {
   const data = {
-    hook: document.getElementById('rHook').value,
-    problem: document.getElementById('rProblem').value,
-    explanation: document.getElementById('rExplanation').value,
-    story: document.getElementById('rStory').value,
-    application: document.getElementById('rApplication').value,
-    cta: document.getElementById('rCta').value,
+    hook: gv('rHook'), problem: gv('rProblem'), explanation: gv('rExplanation'),
+    story: gv('rStory'), application: gv('rApplication'), cta: gv('rCta'),
   };
   try {
     await api('/productions/' + id + '/research', { method: 'POST', body: JSON.stringify(data) });
+    editClaims = []; editScenes = [];
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function submitScript(id) {
-  const context = document.getElementById('cContext').value;
-  if (context.length < 50) {
-    alert('Context must be at least 50 characters. Currently: ' + context.length);
-    return;
+  collectScriptEditors();
+  for (let i = 0; i < editClaims.length; i++) {
+    const c = editClaims[i];
+    if (!c.claim_text || !c.source_reference || !c.source_text || !c.interpretation) {
+      alert('Claim ' + (i+1) + ' is missing required fields (text, reference, source text, interpretation).');
+      return;
+    }
+    if ((c.context || '').length < 50) {
+      alert('Claim ' + (i+1) + ': context must be at least 50 characters. Currently: ' + (c.context||'').length);
+      return;
+    }
   }
-  
+  for (let i = 0; i < editScenes.length; i++) {
+    if (!editScenes[i].narration_text || !editScenes[i].visual_prompt) {
+      alert('Scene ' + (i+1) + ' needs narration text and a visual prompt.');
+      return;
+    }
+  }
   const data = {
-    claims: [{
-      claim_text: document.getElementById('cText').value,
-      source_reference: document.getElementById('cSourceRef').value,
-      source_text: document.getElementById('cSourceText').value,
-      original_language: document.getElementById('cLang').value || 'Hebrew',
-      context: context,
-      interpretation: document.getElementById('cInterp').value,
-      confidence: document.getElementById('cConfidence').value,
-      claim_type: document.getElementById('cType').value,
-      cross_references: document.getElementById('cCross').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
-      alternative_interpretations: document.getElementById('cAlt').value,
-    }],
-    scenes: [{
-      order_index: 0,
-      narration_text: document.getElementById('sNarration').value,
-      visual_prompt: document.getElementById('sVisual').value,
-      claim_ids: [0]
-    }]
+    claims: editClaims.map(c => ({
+      claim_text: c.claim_text, source_reference: c.source_reference, source_text: c.source_text,
+      original_language: c.original_language || 'Hebrew', context: c.context,
+      interpretation: c.interpretation, confidence: c.confidence, claim_type: c.claim_type,
+      cross_references: c.cross_references.split(',').map(s => s.trim()).filter(Boolean),
+      alternative_interpretations: c.alternative_interpretations
+    })),
+    scenes: editScenes.map((s, i) => ({
+      order_index: i, narration_text: s.narration_text, visual_prompt: s.visual_prompt,
+      claim_ids: [Math.min(s.claim_index, editClaims.length - 1)]
+    }))
   };
-  
-  if (!data.claims[0].claim_text || !data.claims[0].source_reference || !data.claims[0].source_text || !data.claims[0].interpretation) {
-    alert('Please fill in all required claim fields (marked with *)');
-    return;
-  }
-  if (!data.scenes[0].narration_text || !data.scenes[0].visual_prompt) {
-    alert('Please fill in all required scene fields');
-    return;
-  }
-  
   try {
     await api('/productions/' + id + '/script', { method: 'POST', body: JSON.stringify(data) });
+    editClaims = []; editScenes = [];
     loadDetail(id);
+    setTimeout(() => { setTab('actions'); }, 50);
   } catch (e) { alert('Error: ' + e.message); }
 }
 
@@ -528,44 +694,47 @@ async function runGate(id) {
   try {
     const res = await api('/productions/' + id + '/evidence', { method: 'POST' });
     if (res.decision === 'FAIL') {
-      alert('Evidence Gate FAILED:\n\n' + res.violations.map(function(v){return '• ' + v.detail}).join('\n') + '\n\nFix the issues and resubmit script.');
+      alert('Evidence Gate FAILED:\n\n' + res.violations.map(function(v){return '• ' + v.detail}).join('\n') + '\n\nUse "Send Back to Script" on the Actions tab to fix and resubmit.');
     }
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function doReview(id, decision) {
-  const reviewer = document.getElementById('reviewer').value;
-  const notes = document.getElementById('reviewNotes').value;
+  const reviewer = gv('reviewer');
+  const notes = gv('reviewNotes');
   try {
-    await api('/productions/' + id + '/review', { method: 'POST', body: JSON.stringify({ decision: decision, reviewer: reviewer, notes: notes }) });
+    const res = await api('/productions/' + id + '/review', { method: 'POST', body: JSON.stringify({ decision: decision, reviewer: reviewer, notes: notes }) });
+    if (decision === 'repair') alert(res.message || 'Sent back to script stage.');
+    editClaims = []; editScenes = [];
     loadDetail(id);
+    if (decision === 'repair') setTimeout(() => { setTab('actions'); }, 50);
   } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function doProduce(id) {
   try {
     await api('/productions/' + id + '/produce', { method: 'POST' });
-    alert('Production started in background. Check back in 30 seconds.');
+    const isEpisode = currentProd && currentProd.video_format === 'episode';
+    alert(isEpisode ? 'Episode production started — ' + currentProd.scenes.length + ' scenes. This may take 10-30 minutes. Check back later.'
+                    : 'Production started in background. Check back in a minute.');
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function doQuality(id, decision) {
-  const reviewer = document.getElementById('qReviewer').value;
-  const notes = document.getElementById('qNotes').value;
+  const reviewer = gv('qReviewer');
+  const notes = gv('qNotes');
   try {
-    await api('/productions/' + id + '/quality', { method: 'POST', body: JSON.stringify({ decision: decision, reviewer: reviewer, notes: notes }) });
+    const res = await api('/productions/' + id + '/quality', { method: 'POST', body: JSON.stringify({ decision: decision, reviewer: reviewer, notes: notes }) });
+    if (decision === 'repair') alert(res.message || 'Sent back for repair — re-run Start Production when ready.');
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function doPackaging(id) {
   const data = {
-    title: document.getElementById('pTitle').value,
-    description: document.getElementById('pDesc').value,
-    keywords: document.getElementById('pKeywords').value,
-    thumbnail_prompt: document.getElementById('pThumb').value,
+    title: gv('pTitle'), description: gv('pDesc'), keywords: gv('pKeywords'), thumbnail_prompt: gv('pThumb'),
   };
   try {
     await api('/productions/' + id + '/packaging', { method: 'POST', body: JSON.stringify(data) });
@@ -574,13 +743,15 @@ async function doPackaging(id) {
 }
 
 async function doApprove(id) {
-  const reviewer = document.getElementById('aReviewer').value;
-  const notes = document.getElementById('aNotes').value;
+  const reviewer = gv('aReviewer');
+  const notes = gv('aNotes');
   try {
     await api('/productions/' + id + '/approve', { method: 'POST', body: JSON.stringify({ decision: 'pass', reviewer: reviewer, notes: notes }) });
     loadDetail(id);
   } catch (e) { alert('Error: ' + e.message); }
 }
+
+// ============ NEW PRODUCTION ============
 
 function showNew() {
   const app = document.getElementById('app');
@@ -589,6 +760,23 @@ function showNew() {
     + '<div class="card" style="max-width:600px">'
     + '<div class="card-title">New Production</div>'
     + '<div class="form-group"><label>Type your line / question *</label><input id="nTopic" placeholder="e.g., Who were the Nephilim in Genesis 6?"></div>'
+    + '<div class="row-2">'
+    + '<div class="form-group"><label>Format</label><select id="nFormat" onchange="document.getElementById(\'sceneCountRow\').style.display=this.value===\'episode\'?\'block\':\'none\'">'
+    + '<option value="short">⚡ Short (~30-60s, 1 scene)</option>'
+    + '<option value="episode">🎬 Episode (4-8 min, multi-scene)</option>'
+    + '</select></div>'
+    + '<div class="form-group"><label>Orientation</label><select id="nOrient">'
+    + '<option value="">Server default (Railway setting)</option>'
+    + '<option value="vertical">📱 Vertical 9:16 (TikTok / Shorts)</option>'
+    + '<option value="landscape">🖥 Landscape 16:9 (YouTube)</option>'
+    + '</select></div>'
+    + '</div>'
+    + '<div class="form-group" id="sceneCountRow" style="display:none"><label>Scene Count (episodes)</label><select id="nScenes">'
+    + '<option value="4">4 scenes (~3 min)</option>'
+    + '<option value="6" selected>6 scenes (~4.5 min)</option>'
+    + '<option value="8">8 scenes (~6 min)</option>'
+    + '<option value="10">10 scenes (~7.5 min)</option>'
+    + '</select></div>'
     + '<button class="btn btn-outline" onclick="doAiFill()">⚡ Research This Line & Fill Boxes</button>'
     + '<div id="aiStatus" style="margin-top:8px;font-size:0.8125rem;color:#94a3b8"></div>'
     + '<div id="draftWrap" style="display:none">'
@@ -627,10 +815,8 @@ function showNew() {
     + '</div>';
 }
 
-function fv(id) { const el = document.getElementById(id); return el ? el.value : ''; }
-
 async function doAiFill() {
-  const topic = fv('nTopic').trim();
+  const topic = gv('nTopic').trim();
   if (!topic) { alert('Type your line or question first'); return; }
   const st = document.getElementById('aiStatus');
   st.textContent = '⚡ Researching... (~30 sec)';
@@ -666,24 +852,28 @@ async function doAiFill() {
 }
 
 async function doCreate() {
-  const topic = fv('nTopic').trim();
+  const topic = gv('nTopic').trim();
   if (!topic) { alert('Type your line or question first'); return; }
   const data = {
     topic: topic,
-    source_question: fv('nQuestion'),
-    doctrinal_category: fv('nCat') || 'general',
-    primary_scripture: fv('nScripture'),
+    source_question: gv('nQuestion'),
+    doctrinal_category: gv('nCat') || 'general',
+    primary_scripture: gv('nScripture'),
     gospel_video: document.getElementById('nGospel') ? document.getElementById('nGospel').checked : false,
+    video_format: gv('nFormat') || 'short',
+    orientation: gv('nOrient') || null,
+    scene_count: gv('nFormat') === 'episode' ? parseInt(gv('nScenes')) || 6 : null,
   };
   try {
     const res = await api('/productions', { method: 'POST', body: JSON.stringify(data) });
     const research = {
-      hook: fv('rHook'), problem: fv('rProblem'), explanation: fv('rExplanation'),
-      story: fv('rStory'), application: fv('rApplication'), cta: fv('rCta')
+      hook: gv('rHook'), problem: gv('rProblem'), explanation: gv('rExplanation'),
+      story: gv('rStory'), application: gv('rApplication'), cta: gv('rCta')
     };
     if (research.hook || research.problem || research.explanation || research.story || research.application || research.cta) {
       await api('/productions/' + res.id + '/research', { method: 'POST', body: JSON.stringify(research) });
     }
+    editClaims = []; editScenes = [];
     loadDetail(res.id);
   } catch (e) { alert('Error: ' + e.message); }
 }
@@ -694,7 +884,7 @@ function stageBadge(stage) {
 
 function escapeHtml(text) {
   if (!text) return '';
-  return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 loadList();
